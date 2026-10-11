@@ -14,6 +14,7 @@ import {
   ExperimentOutlined,
   FieldTimeOutlined,
   FileMarkdownOutlined,
+  FilePdfOutlined,
   FileSearchOutlined,
   FontColorsOutlined,
   FontSizeOutlined,
@@ -24,8 +25,10 @@ import {
   KeyOutlined,
   LinkOutlined,
   LockOutlined,
+  MergeCellsOutlined,
   OrderedListOutlined,
   SafetyCertificateOutlined,
+  ScissorOutlined,
   SwapOutlined,
   ClockCircleOutlined,
   ThunderboltOutlined,
@@ -33,6 +36,7 @@ import {
   AimOutlined,
   GiftOutlined,
   ApartmentOutlined,
+  ApiOutlined,
   MedicineBoxOutlined,
   DollarOutlined,
   MoonOutlined,
@@ -41,6 +45,7 @@ import {
   CompassOutlined,
   FunctionOutlined,
   ReadOutlined,
+  RobotOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -81,6 +86,9 @@ import ChineseCharTool from "./ChineseCharTool";
 import ZodiacTool from "./ZodiacTool";
 import SciCalcTool from "./SciCalcTool";
 import YijingTool from "./YijingTool";
+import PdfTool from "./PdfTool";
+import XmlTool from "./XmlTool";
+import SmartNameTool from "./SmartNameTool";
 
 export type ToolCategory =
   | "文本"
@@ -91,6 +99,7 @@ export type ToolCategory =
   | "生成"
   | "时间"
   | "生活"
+  | "文件"
   | "记录";
 
 export interface ToolDef {
@@ -398,6 +407,38 @@ export const TOOLS: ToolDef[] = [
     icon: ReadOutlined,
     category: "生活",
     component: YijingTool,
+  },
+  {
+    id: "pdf-merge",
+    title: "PDF 合并",
+    desc: "多个 PDF 按顺序合并为一份，可调整顺序",
+    icon: MergeCellsOutlined,
+    category: "文件",
+    component: (props) => <PdfTool {...props} mode="merge" />,
+  },
+  {
+    id: "pdf-split",
+    title: "PDF 分割",
+    desc: "按每页/每 N 页/自定义页码范围拆分 PDF",
+    icon: ScissorOutlined,
+    category: "文件",
+    component: (props) => <PdfTool {...props} mode="split" />,
+  },
+  {
+    id: "xml",
+    title: "XML 工具",
+    desc: "格式化 / 压缩 / 校验（行列定位）/ 转义反转义",
+    icon: ApiOutlined,
+    category: "开发",
+    component: XmlTool,
+  },
+  {
+    id: "smart-name",
+    title: "智能取名",
+    desc: "人名/变量/项目/网名取名：算法组合 + 大模型生成",
+    icon: RobotOutlined,
+    category: "生成",
+    component: SmartNameTool,
   },
   {
     id: "todo",
