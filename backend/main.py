@@ -1,61 +1,50 @@
 """
-FatNotes Bespoke Plugin — Backend Entry Point
+FatNotes Bespoke Plugin — fat-tools Backend Entry Point
 
-This is the main entry file for your plugin's backend process.
-Register handlers using the @handler decorator. Each handler receives
-a params dict and should return a JSON-serializable result.
+工具操作记录专用 SQLite 后端。
 
-The frontend calls handlers via:
-    const result = await sdk.backend.invoke("handlerName", { key: "value" });
+前端调用方式：
+    const result = await sdk.backend.invoke("history.add", { toolId, toolTitle, action, summary, detail });
 
-IMPORTANT: Only write backend code for functionality that the SDK cannot provide.
-Prefer sdk.query, sdk.mutation, sdk.dataSource for data operations.
-Use backend handlers for: file processing, external API calls, heavy computation,
-or when you need Python libraries not available in the host.
+数据库文件：`<workspace>/fatTools/history.db`（stdlib sqlite3，无第三方依赖）。
 """
 
-from plugin_runtime import (
-    handler,
-    run,
-    host_get_plugin_config,
-    host_set_plugin_config,
-    host_get_system_paths,
-)
+from plugin_runtime import handler, run
+
+from service import historyStore  # noqa: F401  （导入即注册 @handler）
 
 
-@handler("hello")
-def hello(params):
-    """Example handler — replace with your own logic."""
-    name = params.get("name", "World")
-    return {"message": f"Hello from fat-tools backend, {name}!"}
+@handler("history.add")
+def history_add(params):
+    """写入一条工具操作记录。
+
+    params: { toolId, toolTitle?, action?, summary?, detail? }
+    """
+    return historyStore.add_record(params or {})
 
 
-@handler("echo")
-def echo(params):
-    """Echo back the received params — useful for testing."""
-    return {"received": params}
+@handler("history.list")
+def history_list(params):
+    """查询操作记录。params: { toolId?, limit? } → { items, total, limit }"""
+    return historyStore.list_records(params or {})
 
 
-@handler("getSystemPaths")
-def get_system_paths(_params):
-    """Read system paths from host."""
-    return host_get_system_paths()
+@handler("history.clear")
+def history_clear(params):
+    """清空操作记录。params: { toolId? }（缺省全清）→ { removed }"""
+    return historyStore.clear_records(params or {})
 
 
-@handler("getPluginConfig")
-def get_plugin_config(_params):
-    """Read this plugin's runtime config from host."""
-    return host_get_plugin_config()
+@handler("history.stats")
+def history_stats(_params):
+    """各工具记录条数统计 → { total, items: [{toolId, toolTitle, count}] }"""
+    return historyStore.stats_records(_params or {})
 
 
-@handler("setPluginConfig")
-def set_plugin_config(params):
-    """Update this plugin's runtime config in host."""
-    config_data = params.get("config", {}) if isinstance(params, dict) else {}
-    merge = True
-    if isinstance(params, dict):
-        merge = bool(params.get("merge", True))
-    return host_set_plugin_config(config_data, merge=merge)
+@handler("history.dbPath")
+def history_db_path(_params):
+    """返回当前 SQLite 文件路径（便于排查与展示）。"""
+    return {"path": str(historyStore._db_path())}
 
 
 if __name__ == "__main__":

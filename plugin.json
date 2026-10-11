@@ -10,7 +10,7 @@
   "contributions": {
     "activityBar": true,
     "primarySidebar": true,
-    "panel": true,
+    "panel": false,
     "footer": true,
     "routes": true,
     "widgetTypes": true

@@ -47,10 +47,42 @@ If names don't match you will see:
 ## File structure
 
 - `src/index.tsx` — plugin entry; must export `activate(sdk)` and `deactivate()`.
-- `src/PluginView.tsx` — example contribution component.
+- `src/MenuView.tsx` — 主侧边栏（次面板）：只展示工具菜单，点击走 `sdk.router.navigate`。
+- `src/WorkPageView.tsx` — 工作台整页（右侧工作区）：按当前路由渲染对应工具。
+- `src/routes.ts` — 工具路由表（`/tools/<toolId>`）与 path ⇄ toolId 互转。
+- `src/tools/registry.tsx` — 工具注册表（新增工具只需在此加一条记录）。
+- `src/ThemeShell.tsx` — 跟随宿主明暗主题的 antd ConfigProvider 壳。
 - `plugin.json` — manifest consumed by the FatNotes installer.
 - `types/fat-notes-sdk.d.ts` — SDK type declarations (mirror of host).
 - `webpack.config.js` — Module Federation build (`exposes ./plugin`).
+
+## 布局约定（参考 fat-stock）
+
+活动栏项 id 必须与工作台页 id 完全一致（本插件均为 `fat-tools.main`），
+宿主才认为「点图标后：左侧主侧边栏 = 菜单，右侧工作区 = 功能页」：
+
+```ts
+sdk.contributions.registerActivityBarItem({ id: "fat-tools.main", icon: "Wrench" });
+sdk.contributions.registerPrimarySidebar(() => <MenuView sdk={sdk} />);   // 只放菜单
+sdk.contributions.registerWorkbenchPage({ id: "fat-tools.main", render: () => <WorkPageView sdk={sdk} /> });
+```
+
+菜单点击 → `sdk.router.navigate("/tools/<toolId>")`；`WorkPageView` 订阅
+`sdk.router.onChange` 后按 `getCurrent().path` 渲染对应工具。
+
+## 操作记录落库（专用 SQLite）
+
+所有工具的操作历史统一写入专用 SQLite：`<workspace>/fatTools/history.db`
+（stdlib `sqlite3`，无第三方依赖）。Python 后端 `backend/` 暴露 4 个 handler：
+
+- `history.add` — 写入一条记录（按工具各保留最近 500 条，字段自动截断）
+- `history.list` — 查询（可按 toolId 过滤，倒序）
+- `history.clear` — 清空（可按 toolId）
+- `history.stats` / `history.dbPath` — 统计与库文件路径
+
+前端 `src/historyClient.ts` 封装调用；后端不可用时自动降级 localStorage。
+工具内调用：显式动作（计算/格式化/编码等）直接 `recordUsage()`，
+「输入即算」类（哈希/正则/字数/颜色/进制/时间戳）用 `recordUsageDebounced()` 停顿后落库。
 
 ## SDK capabilities
 

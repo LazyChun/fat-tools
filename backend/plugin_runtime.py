@@ -151,6 +151,11 @@ def wait_for_host_ready(
     return False
 
 
+def host_get_login_info() -> Dict[str, Any]:
+    result = _host_call("auth.getLoginInfo", {})
+    return result if isinstance(result, dict) else {}
+
+
 def host_get_system_paths() -> Dict[str, Any]:
     """获取宿主软件的工作目录及配置路径信息。
 

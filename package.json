@@ -15,6 +15,7 @@
     "react-dom": "18.2.0"
   },
   "devDependencies": {
+    "@ant-design/icons": "^6.0.0",
     "@module-federation/enhanced": "^0.7.0",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
@@ -35,10 +36,5 @@
     "vitest": "^4.1.11",
     "webpack": "5.93.0",
     "webpack-cli": "^5.1.4"
-  },
-  "peerDependencies": {
-    "antd": "6.x",
-    "react-intl": "6.x",
-    "react-redux": "9.x"
   }
 }
