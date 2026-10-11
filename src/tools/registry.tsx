@@ -35,6 +35,11 @@ import {
   ApartmentOutlined,
   MedicineBoxOutlined,
   DollarOutlined,
+  MoonOutlined,
+  CloudServerOutlined,
+  BlockOutlined,
+  CompassOutlined,
+  FunctionOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -69,6 +74,11 @@ import HolidayTool from "./HolidayTool";
 import KinshipTool from "./KinshipTool";
 import BloodTypeTool from "./BloodTypeTool";
 import CurrencyTool from "./CurrencyTool";
+import LunarTool from "./LunarTool";
+import DnsTool from "./DnsTool";
+import ChineseCharTool from "./ChineseCharTool";
+import ZodiacTool from "./ZodiacTool";
+import SciCalcTool from "./SciCalcTool";
 
 export type ToolCategory =
   | "文本"
@@ -338,6 +348,46 @@ export const TOOLS: ToolDef[] = [
     icon: DollarOutlined,
     category: "数值",
     component: CurrencyTool,
+  },
+  {
+    id: "lunar",
+    title: "农历转换",
+    desc: "公历 ↔ 农历互转，干支生肖、二十四节气与节日",
+    icon: MoonOutlined,
+    category: "时间",
+    component: LunarTool,
+  },
+  {
+    id: "dns",
+    title: "DNS 查询",
+    desc: "DoH 在线查询 A/AAAA/CNAME/MX/TXT 等解析记录",
+    icon: CloudServerOutlined,
+    category: "开发",
+    component: DnsTool,
+  },
+  {
+    id: "hanzi",
+    title: "汉字拆解",
+    desc: "拆字部件、结构分析、拼音与笔画数",
+    icon: BlockOutlined,
+    category: "文本",
+    component: ChineseCharTool,
+  },
+  {
+    id: "zodiac",
+    title: "星座罗盘",
+    desc: "太阳/月亮/上升星座计算，黄道罗盘与星座配对",
+    icon: CompassOutlined,
+    category: "生活",
+    component: ZodiacTool,
+  },
+  {
+    id: "scicalc",
+    title: "科学计算器",
+    desc: "三角函数/对数/阶乘/统计，角度制切换",
+    icon: FunctionOutlined,
+    category: "数值",
+    component: SciCalcTool,
   },
   {
     id: "todo",

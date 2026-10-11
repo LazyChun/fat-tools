@@ -337,27 +337,32 @@ const HashTool: React.FC<Props> = ({ onBack }) => {
           </div>
         ) : (
           <div>
-            <Dragger
-              multiple
-              showUploadList={false}
-              beforeUpload={(file) => {
-                enqueueFiles([file as unknown as File]);
-                return false;
-              }}
-              style={{ padding: "6px 0", height: "120px" }}
-            >
-              <p style={{ margin: 0, fontSize: 28, color: "#1677ff" }}>
-                <InboxOutlined />
-              </p>
-              <p style={{ margin: "6px 0 2px" }}>
-                点击或拖拽文件到此处计算哈希
-              </p>
-              <p style={{ margin: 0 }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  文件仅在本机浏览器内计算，不会上传；大文件分块流式处理，多算法单遍完成
-                </Text>
-              </p>
-            </Dragger>
+            {/* Dragger 外层是 inline 的 span.ant-upload-wrapper，直接作为 grid 项会因
+                block-in-inline 碎片化导致行高计算错误（内容溢出并与下方历史面板重叠），
+                必须包一层块级 div 隔离 */}
+            <div>
+              <Dragger
+                multiple
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  enqueueFiles([file as unknown as File]);
+                  return false;
+                }}
+                style={{ padding: "6px 0", height: "120px" }}
+              >
+                <p style={{ margin: 0, fontSize: 28, color: "#1677ff" }}>
+                  <InboxOutlined />
+                </p>
+                <p style={{ margin: "6px 0 2px" }}>
+                  点击或拖拽文件到此处计算哈希
+                </p>
+                <p style={{ margin: 0 }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    文件仅在本机浏览器内计算，不会上传；大文件分块流式处理，多算法单遍完成
+                  </Text>
+                </p>
+              </Dragger>
+            </div>
 
             {fileBusy ? (
               <div

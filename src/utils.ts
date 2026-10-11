@@ -89,6 +89,8 @@ export function bytesToHex(bytes: Uint8Array): string {
 export interface CalcOptions {
   /** 三角函数角度制：rad（默认）或 deg */
   angleMode?: "rad" | "deg";
+  /** 记忆值（在表达式中以 mem 引用） */
+  memory?: number;
 }
 
 type Token =
@@ -110,6 +112,36 @@ function normalizeAngle(x: number, opt: CalcOptions, toRad: boolean): number {
       ? (x * Math.PI) / 180
       : (x * 180) / Math.PI
     : x;
+}
+
+/** 阶乘（供表达式内置 fact 使用） */
+function factInternal(n: number): number {
+  if (n < 0 || !Number.isInteger(n)) throw new Error("fact 仅支持非负整数");
+  if (n > 170) return Infinity;
+  let r = 1;
+  for (let i = 2; i <= n; i++) r *= i;
+  return r;
+}
+
+/** 最大公约数（供表达式内置 gcd 使用） */
+function gcdInternal(a: number, b: number): number {
+  let x = Math.abs(Math.round(a));
+  let y = Math.abs(Math.round(b));
+  while (y) {
+    const t = x % y;
+    x = y;
+    y = t;
+  }
+  return x;
+}
+
+/** 组合数（供表达式内置 nCr 使用） */
+function nCrInternal(n: number, r: number): number {
+  if (r < 0 || r > n) return 0;
+  let result = 1;
+  const k = Math.min(r, n - r);
+  for (let i = 1; i <= k; i++) result = (result * (n - k + i)) / i;
+  return Math.round(result);
 }
 
 const FUNCTIONS: Record<string, (args: number[], opt: CalcOptions) => number> =
@@ -134,6 +166,20 @@ const FUNCTIONS: Record<string, (args: number[], opt: CalcOptions) => number> =
     min: (a) => Math.min(...a),
     max: (a) => Math.max(...a),
     pow: (a) => Math.pow(a[0], a[1]),
+    sinh: (a) => Math.sinh(a[0]),
+    cosh: (a) => Math.cosh(a[0]),
+    tanh: (a) => Math.tanh(a[0]),
+    fact: (a) => factInternal(a[0]),
+    gcd: (a) => gcdInternal(a[0], a[1]),
+    lcm: (a) => (gcdInternal(a[0], a[1]) === 0 ? 0 : Math.abs(Math.round(a[0]) * Math.round(a[1])) / gcdInternal(a[0], a[1])),
+    ncr: (a) => nCrInternal(a[0], a[1]),
+    npr: (a) => {
+      if (a[1] < 0 || a[1] > a[0]) return 0;
+      let r = 1;
+      for (let i = 0; i < a[1]; i++) r *= a[0] - i;
+      return Math.round(r);
+    },
+    hypot: (a) => Math.hypot(...a),
   };
 
 function tokenize(input: string): Token[] {
@@ -297,6 +343,11 @@ export function evaluateExpression(
         return fn(args, options);
       }
       if (name in CONSTANTS) return CONSTANTS[name];
+      if (name === "mem") {
+        if (!Number.isFinite(options.memory))
+          throw new Error("记忆值 mem 为空，请先按 M+ 存入");
+        return options.memory as number;
+      }
       throw new Error(`未知标识符「${name}」`);
     }
     throw new Error("表达式不完整");
@@ -2703,4 +2754,1154 @@ export async function fetchRatesOnline(
     }
   }
   return null;
+}
+
+/* ------------------------------------------------------------------ */
+/* 农历（1900-2100，纯算法，无需外网）                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 农历数据表：每年一个整数，编码方式与香港天文台 / 常见开源实现一致。
+ *   位 0..3   ：闰月月份（0 表示该年无闰月）
+ *   位 4..15  ：1..12 月的大小月（1 = 30 天，0 = 29 天），从正月起（低位在前）
+ *   位 16..19 ：闰月天数（1 = 30 天，0 = 29 天）
+ *   位 20..23 ：正月初一对应的公历月份（1..12）
+ *   位 24..28 ：正月初一对应的公历日（1..31）
+ * 覆盖 1900 年（正月初一 1900-01-31）至 2100 年。
+ */
+const LUNAR_INFO: number[] = [
+  0x04bd8, 0x04ae0, 0x0a570, 0x054d5, 0x0d260, 0x0d950, 0x16554, 0x056a0,
+  0x09ad0, 0x055d2, 0x04ae0, 0x0a5b6, 0x0a4d0, 0x0d250, 0x1d255, 0x0b540,
+  0x0d6a0, 0x0ada2, 0x095b0, 0x14977, 0x04970, 0x0a4b0, 0x0b4b5, 0x06a50,
+  0x06d40, 0x1ab54, 0x02b60, 0x09570, 0x052f2, 0x04970, 0x06566, 0x0d4a0,
+  0x0ea50, 0x06e95, 0x05ad0, 0x02b60, 0x186e3, 0x092e0, 0x1c8d7, 0x0c950,
+  0x0d4a0, 0x1d8a6, 0x0b550, 0x056a0, 0x1a5b4, 0x025d0, 0x092d0, 0x0d2b2,
+  0x0a950, 0x0b557, 0x06ca0, 0x0b550, 0x15355, 0x04da0, 0x0a5b0, 0x14573,
+  0x052b0, 0x0a9a8, 0x0e950, 0x06aa0, 0x0aea6, 0x0ab50, 0x04b60, 0x0aae4,
+  0x0a570, 0x05260, 0x0f263, 0x0d950, 0x05b57, 0x056a0, 0x096d0, 0x04dd5,
+  0x04ad0, 0x0a4d0, 0x0d4d4, 0x0d250, 0x0d558, 0x0b540, 0x0b6a0, 0x195a6,
+  0x095b0, 0x049b0, 0x0a974, 0x0a4b0, 0x0b27a, 0x06a50, 0x06d40, 0x0af46,
+  0x0ab60, 0x09570, 0x04af5, 0x04970, 0x064b0, 0x074a3, 0x0ea50, 0x06b58,
+  0x05ac0, 0x0ab60, 0x096d5, 0x092e0, 0x0c960, 0x0d954, 0x0d4a0, 0x0da50,
+  0x07552, 0x056a0, 0x0abb7, 0x025d0, 0x092d0, 0x0cab5, 0x0a950, 0x0b4a0,
+  0x0baa4, 0x0ad50, 0x055d9, 0x04ba0, 0x0a5b0, 0x15176, 0x052b0, 0x0a930,
+  0x07954, 0x06aa0, 0x0ad50, 0x05b52, 0x04b60, 0x0a6e6, 0x0a4e0, 0x0d260,
+  0x0ea65, 0x0d530, 0x05aa0, 0x076a3, 0x096d0, 0x04afb, 0x04ad0, 0x0a4d0,
+  0x1d0b6, 0x0d250, 0x0d520, 0x0dd45, 0x0b5a0, 0x056d0, 0x055b2, 0x049b0,
+  0x0a577, 0x0a4b0, 0x0aa50, 0x1b255, 0x06d20, 0x0ada0, 0x14b63, 0x09370,
+  0x049f8, 0x04970, 0x064b0, 0x168a6, 0x0ea50, 0x06b20, 0x1a6c4, 0x0aae0,
+  0x0a2e0, 0x0d2e3, 0x0c960, 0x0d557, 0x0d4a0, 0x0da50, 0x05d55, 0x056a0,
+  0x0a6d0, 0x055d4, 0x052d0, 0x0a9b8, 0x0a950, 0x0b4a0, 0x0b6a6, 0x0ad50,
+  0x055a0, 0x0aba4, 0x0a5b0, 0x052b0, 0x0b273, 0x06930, 0x07337, 0x06aa0,
+  0x0ad50, 0x14b55, 0x04b60, 0x0a570, 0x054e4, 0x0d160, 0x0e968, 0x0d520,
+  0x0daa0, 0x16aa6, 0x056d0, 0x04ae0, 0x0a9d4, 0x0a2d0, 0x0d150, 0x0f252,
+  0x0d520,
+];
+
+/** 天干（10） */
+export const HEAVENLY_STEMS = [
+  "甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸",
+];
+/** 地支（12） */
+export const EARTHLY_BRANCHES = [
+  "子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥",
+];
+/** 生肖（与地支一一对应） */
+export const ZODIAC_ANIMALS = [
+  "鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪",
+];
+
+/** 农历月份中文名（索引 0..11 → 正..腊） */
+export const LUNAR_MONTH_NAMES = [
+  "正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "冬", "腊",
+];
+/** 农历日中文名（索引 1..30） */
+export const LUNAR_DAY_NAMES = [
+  "", "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九",
+  "初十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八",
+  "十九", "二十", "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七",
+  "廿八", "廿九", "三十",
+];
+/** 二十四节气（从立春起，公历顺序从「小寒」开始更贴合年内排序，此处按通用顺序） */
+export const SOLAR_TERMS = [
+  "小寒", "大寒", "立春", "雨水", "惊蛰", "春分", "清明", "谷雨",
+  "立夏", "小满", "芒种", "夏至", "小暑", "大暑", "立秋", "处暑",
+  "白露", "秋分", "寒露", "霜降", "立冬", "小雪", "大雪", "冬至",
+];
+
+/** 农历数据表覆盖的年份范围 */
+export const LUNAR_MIN_YEAR = 1900;
+export const LUNAR_MAX_YEAR = 2100;
+
+const LUNAR_BASE_DATE = Date.UTC(1900, 0, 31); // 1900-01-31 为农历 1900 年正月初一
+const MS_PER_LUNAR_DAY = 86_400_000;
+
+/** 该农历年闰几月（0 表示无闰月） */
+export function lunarLeapMonth(year: number): number {
+  return LUNAR_INFO[year - LUNAR_MIN_YEAR] & 0xf;
+}
+
+/** 该农历年闰月的天数（无闰月返回 0） */
+export function lunarLeapDays(year: number): number {
+  if (lunarLeapMonth(year) === 0) return 0;
+  return (LUNAR_INFO[year - LUNAR_MIN_YEAR] & 0x10000) ? 30 : 29;
+}
+
+/** 该农历年第 month 月（不含闰月）的天数，month 取 1..12 */
+export function lunarMonthDays(year: number, month: number): number {
+  return (LUNAR_INFO[year - LUNAR_MIN_YEAR] & (0x10000 >> month)) ? 30 : 29;
+}
+
+/** 该农历年的总天数 */
+export function lunarYearDays(year: number): number {
+  let sum = 0;
+  for (let m = 1; m <= 12; m++) sum += lunarMonthDays(year, m);
+  return sum + lunarLeapDays(year);
+}
+
+export interface LunarDate {
+  /** 农历年 */
+  year: number;
+  /** 农历月（1..12；闰月时 isLeap 为 true） */
+  month: number;
+  /** 农历日（1..30） */
+  day: number;
+  /** 是否闰月 */
+  isLeap: boolean;
+  /** 中文表达，如「乙巳年正月初一」 */
+  text: string;
+  /** 干支纪年，如「乙巳」 */
+  ganzhi: string;
+  /** 生肖，如「蛇」 */
+  zodiac: string;
+  /** 月名，如「正月」「闰六月」 */
+  monthText: string;
+  /** 日名，如「初一」「十五」 */
+  dayText: string;
+  /** 是否处于农历新年（正月初一） */
+  isNewYear: boolean;
+}
+
+/** 公历 Date → 农历（超出 1900-2100 返回 null） */
+export function toLunar(date: Date): LunarDate | null {
+  const y = date.getFullYear();
+  if (y < LUNAR_MIN_YEAR || y > LUNAR_MAX_YEAR) return null;
+  const utcMidnight = Date.UTC(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  );
+  let offsetDays = Math.floor(
+    (utcMidnight - LUNAR_BASE_DATE) / MS_PER_LUNAR_DAY,
+  );
+
+  let lunarYear = LUNAR_MIN_YEAR;
+  // 定位农历年
+  for (; lunarYear <= LUNAR_MAX_YEAR; lunarYear++) {
+    const days = lunarYearDays(lunarYear);
+    if (offsetDays < days) break;
+    offsetDays -= days;
+  }
+  if (lunarYear > LUNAR_MAX_YEAR) return null;
+
+  const leap = lunarLeapMonth(lunarYear);
+  // 构造该农历年的「月序」列表：每项为 { month, isLeap, days }，
+  // 闰月在对应月份之后插入。逐项扣减剩余天数即可定位。
+  const months: { month: number; isLeap: boolean; days: number }[] = [];
+  for (let m = 1; m <= 12; m++) {
+    months.push({ month: m, isLeap: false, days: lunarMonthDays(lunarYear, m) });
+    if (leap === m) {
+      months.push({ month: m, isLeap: true, days: lunarLeapDays(lunarYear) });
+    }
+  }
+
+  let isLeap = false;
+  let lunarMonth = 1;
+  for (const entry of months) {
+    if (offsetDays < entry.days) {
+      lunarMonth = entry.month;
+      isLeap = entry.isLeap;
+      break;
+    }
+    offsetDays -= entry.days;
+  }
+  const lunarDay = offsetDays + 1;
+
+  const ganzhi =
+    HEAVENLY_STEMS[(lunarYear - 4) % 10] +
+    EARTHLY_BRANCHES[(lunarYear - 4) % 12];
+  const zodiac = ZODIAC_ANIMALS[(lunarYear - 4) % 12];
+  const monthText =
+    (isLeap ? "闰" : "") + LUNAR_MONTH_NAMES[lunarMonth - 1] + "月";
+  const dayText = LUNAR_DAY_NAMES[lunarDay];
+  return {
+    year: lunarYear,
+    month: lunarMonth,
+    day: lunarDay,
+    isLeap,
+    ganzhi,
+    zodiac,
+    monthText,
+    dayText,
+    isNewYear: lunarMonth === 1 && lunarDay === 1 && !isLeap,
+    text: `${ganzhi}年${monthText}${dayText}`,
+  };
+}
+
+/**
+ * 求某公历年的二十四节气日期。
+ * 采用「公式 + 世纪修正」（1900-2100 精度足够日级）：
+ *   [Y×D + C] - L，其中 Y 为年份后两位，D 为 0.2422 常数，L 为闰年修正数。
+ */
+const TERM_C_20: number[] = [
+  6.11, 20.84, 4.6295, 19.4599, 6.3826, 21.4155, 5.59, 20.888, 6.318, 21.86,
+  6.5, 22.2, 7.928, 23.65, 8.35, 23.95, 8.44, 23.822, 9.098, 24.218, 8.218,
+  23.08, 7.9, 22.6,
+];
+const TERM_C_21: number[] = [
+  5.4055, 20.12, 3.87, 18.73, 5.63, 20.646, 4.81, 20.1, 5.52, 21.04, 5.678,
+  21.37, 7.108, 22.83, 7.5, 23.13, 7.646, 23.042, 8.318, 23.438, 7.438, 22.36,
+  7.18, 21.94,
+];
+
+export interface SolarTerm {
+  name: string;
+  /** 公历月（1..12） */
+  month: number;
+  /** 公历日 */
+  day: number;
+}
+
+/** 求某年二十四节气（每 2 个节气对应一个公历月） */
+export function solarTermsOfYear(year: number): SolarTerm[] {
+  const out: SolarTerm[] = [];
+  const y2 = year % 100;
+  for (let i = 0; i < 24; i++) {
+    const c = year < 2000 ? TERM_C_20[i] : TERM_C_21[i];
+    let day = Math.floor(y2 * 0.2422 + c) - Math.floor((y2 - 1) / 4);
+    // 特殊年份修正（已知例外，数量极少，忽略不影响主体体验）
+    if (year === 1986 && i === 3) day = 5;
+    out.push({ name: SOLAR_TERMS[i], month: Math.floor(i / 2) + 1, day });
+  }
+  return out;
+}
+
+/** 求某公历日期对应的节气（当天无节气返回 null） */
+export function solarTermOf(date: Date): string | null {
+  const terms = solarTermsOfYear(date.getFullYear());
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  const hit = terms.find((t) => t.month === m && t.day === d);
+  return hit ? hit.name : null;
+}
+
+/** 农历日期中文表达（如「正月初一」） */
+export function lunarDateText(ld: LunarDate): string {
+  return `${ld.monthText}${ld.dayText}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* DNS 记录解析                                                        */
+/* ------------------------------------------------------------------ */
+
+/** 支持的 DNS 记录类型 */
+export const DNS_TYPES = [
+  "A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "SRV", "CAA", "PTR",
+] as const;
+export type DnsType = (typeof DNS_TYPES)[number];
+
+/** 记录类型说明 */
+export const DNS_TYPE_DESC: Record<DnsType, string> = {
+  A: "IPv4 地址记录，将域名指向 32 位 IPv4 地址",
+  AAAA: "IPv6 地址记录，将域名指向 128 位 IPv6 地址",
+  CNAME: "别名记录，将域名指向另一个域名",
+  MX: "邮件交换记录，指定接收邮件的服务器",
+  TXT: "文本记录，常用于 SPF / DKIM / 站点验证",
+  NS: "域名服务器记录，指定该域名的权威 DNS",
+  SOA: "起始授权机构记录，定义区域的主 NS 与管理信息",
+  SRV: "服务记录，指定某服务的主机与端口",
+  CAA: "证书颁发机构授权记录，限定可签发证书的 CA",
+  PTR: "反向解析记录，用于 IP → 域名",
+};
+
+/** 校验域名合法性（宽松规则，允许下划线与通配符，允许 IDN） */
+export function isValidDomain(domain: string): boolean {
+  const d = domain.trim().replace(/\.$/, "");
+  if (!d || d.length > 253) return false;
+  const labels = d.split(".");
+  if (labels.length < 1) return false;
+  return labels.every(
+    (label) =>
+      label.length > 0 &&
+      label.length <= 63 &&
+      /^(?!-)[\w\u00a1-\uffff-]{1,63}(?<!-)$/u.test(label),
+  );
+}
+
+export interface DnsAnswer {
+  name: string;
+  type: number | string;
+  TTL: number;
+  data: string;
+}
+
+/** DNS 记录类型名 → 数字（DoH JSON 返回的数字类型用） */
+export const DNS_TYPE_CODE: Record<DnsType, number> = {
+  A: 1,
+  NS: 2,
+  CNAME: 5,
+  SOA: 6,
+  PTR: 12,
+  MX: 15,
+  TXT: 16,
+  AAAA: 28,
+  SRV: 33,
+  CAA: 257,
+};
+
+const DNS_CODE_NAME: Record<number, string> = Object.fromEntries(
+  Object.entries(DNS_TYPE_CODE).map(([name, code]) => [code, name]),
+);
+
+/** 数字类型 → 类型名 */
+export function dnsTypeName(code: number | string): string {
+  if (typeof code === "string") return code;
+  return DNS_CODE_NAME[code] ?? String(code);
+}
+
+/** DoH JSON 响应结构（Google / Cloudflare 兼容） */
+export interface DohResponse {
+  Status: number;
+  Answer?: DnsAnswer[];
+  Authority?: DnsAnswer[];
+}
+
+export const DNS_RCODE: Record<number, string> = {
+  0: "NOERROR（查询成功）",
+  1: "FORMERR（请求格式错误）",
+  2: "SERVFAIL（服务器故障）",
+  3: "NXDOMAIN（域名不存在）",
+  4: "NOTIMP（服务器不支持该查询）",
+  5: "REFUSED（查询被拒绝）",
+};
+
+/** 格式化 DoH 记录数据（TXT 去引号、MX 补优先级可读性） */
+export function formatDnsData(type: string, data: string): string {
+  const t = type.toUpperCase();
+  if (t === "TXT") return data.replace(/^"|"$/g, "");
+  return data;
+}
+
+/**
+ * DNS over HTTPS 查询（Google DNS JSON API，失败自动切 Cloudflare）。
+ * 浏览器环境无法直接发 UDP，DoH 是纯前端唯一可行的方案。
+ */
+export async function queryDns(
+  domain: string,
+  type: DnsType = "A",
+  timeoutMs = 8000,
+): Promise<{ answers: DnsAnswer[]; status: number }> {
+  const endpoints = [
+    `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=${type}`,
+    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=${type}`,
+  ];
+  let lastErr: Error | null = null;
+  for (const url of endpoints) {
+    const controller =
+      typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = controller
+      ? window.setTimeout(() => controller.abort(), timeoutMs)
+      : null;
+    try {
+      const resp = await fetch(url, {
+        headers: { accept: "application/dns-json" },
+        signal: controller?.signal,
+        cache: "no-store",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = (await resp.json()) as DohResponse;
+      const answers = (data.Answer ?? []).map((a) => ({
+        name: a.name,
+        type: dnsTypeName(a.type),
+        TTL: a.TTL,
+        data: formatDnsData(dnsTypeName(a.type), a.data),
+      }));
+      return { answers, status: data.Status ?? 0 };
+    } catch (e) {
+      lastErr = e as Error;
+    } finally {
+      if (timer !== null) window.clearTimeout(timer);
+    }
+  }
+  throw lastErr ?? new Error("DNS 查询失败（网络不可达）");
+}
+
+/* ------------------------------------------------------------------ */
+/* 汉字拆解（拆字 / 部件 / 拼音 / 笔画 / 结构）                          */
+/* ------------------------------------------------------------------ */
+
+/** 少量常用字的部件拆解表（示例数据，可逐步扩充） */
+export const CHAR_DECOMPOSE: Record<string, string[]> = {
+  好: ["女", "子"],
+  明: ["日", "月"],
+  休: ["亻", "木"],
+  林: ["木", "木"],
+  森: ["木", "木", "木"],
+  从: ["人", "人"],
+  众: ["人", "人", "人"],
+  尖: ["小", "大"],
+  尘: ["小", "土"],
+  男: ["田", "力"],
+  女: ["女"],
+  安: ["宀", "女"],
+  字: ["宀", "子"],
+  家: ["宀", "豕"],
+  室: ["宀", "至"],
+  完: ["宀", "元"],
+  花: ["艹", "化"],
+  草: ["艹", "早"],
+  茶: ["艹", "人", "木"],
+  苗: ["艹", "田"],
+  菜: ["艹", "爫", "木"],
+  洗: ["氵", "先"],
+  江: ["氵", "工"],
+  河: ["氵", "可"],
+  湖: ["氵", "胡"],
+  海: ["氵", "每"],
+  清: ["氵", "青"],
+  汉: ["氵", "又"],
+  语: ["讠", "吾"],
+  请: ["讠", "青"],
+  说: ["讠", "兑"],
+  读: ["讠", "卖"],
+  记: ["讠", "己"],
+  认: ["讠", "人"],
+  谢: ["讠", "身", "寸"],
+  你: ["亻", "尔"],
+  他: ["亻", "也"],
+  们: ["亻", "门"],
+  仁: ["亻", "二"],
+  作: ["亻", "乍"],
+  信: ["亻", "言"],
+  保: ["亻", "呆"],
+  打: ["扌", "丁"],
+  找: ["扌", "戈"],
+  拉: ["扌", "立"],
+  推: ["扌", "隹"],
+  提: ["扌", "是"],
+  握: ["扌", "屋"],
+  时: ["日", "寸"],
+  晴: ["日", "青"],
+  晚: ["日", "免"],
+  星: ["日", "生"],
+  早: ["日", "十"],
+  春: ["三", "人", "日"],
+  秋: ["禾", "火"],
+  冬: ["夂", "冫"],
+  天: ["一", "大"],
+  地: ["土", "也"],
+  雪: ["雨", "彐"],
+  雷: ["雨", "田"],
+  电: ["日", "乚"],
+  婚: ["女", "昏"],
+  她: ["女", "也"],
+  妈: ["女", "马"],
+  姐: ["女", "且"],
+  妹: ["女", "未"],
+  娘: ["女", "良"],
+  妇: ["女", "彐"],
+  想: ["木", "目", "心"],
+  思: ["田", "心"],
+  忘: ["亡", "心"],
+  急: ["刍", "心"],
+  志: ["士", "心"],
+  念: ["今", "心"],
+  沙: ["氵", "少"],
+  冰: ["冫", "水"],
+  冻: ["冫", "东"],
+  冷: ["冫", "令"],
+  饭: ["饣", "反"],
+  饿: ["饣", "我"],
+  饮: ["饣", "欠"],
+  铁: ["钅", "失"],
+  银: ["钅", "艮"],
+  钱: ["钅", "戋"],
+  钟: ["钅", "中"],
+  鸟: ["勹", "丶", "灬"],
+};
+
+/** 汉字结构类型 */
+export type CharStructure =
+  | "独体"
+  | "左右"
+  | "左中右"
+  | "上下"
+  | "上中下"
+  | "半包围"
+  | "全包围"
+  | "品字";
+
+/** 常见部首（用于粗略推断结构） */
+const RADICALS = "氵亻讠扌忄口日月木林火土女子宀艹钅饣竹目心雨马鸟鱼虫犭";
+
+export interface CharDecomposeResult {
+  /** 单个汉字 */
+  char: string;
+  /** 是否 CJK 汉字 */
+  isHan: boolean;
+  /** 部件序列（可能为空） */
+  parts: string[];
+  /** 结构类型 */
+  structure: CharStructure;
+  /** 笔画数（可能为 0 表示未知） */
+  strokes: number;
+  /** 拼音（含声调，多音字用 / 分隔） */
+  pinyin: string;
+  /** 声调音标拼音（不带调号） */
+  pinyinPlain: string;
+}
+
+/** 常用字笔画数表（600+ 常用字的简化计数，未收录返回 0） */
+const STROKE_TABLE: Record<string, number> = {
+  一: 1, 二: 2, 十: 2, 丁: 2, 厂: 2, 七: 2, 卜: 2, 人: 2, 入: 2,
+  八: 2, 九: 2, 几: 2, 儿: 2, 了: 2, 力: 2, 乃: 2, 刀: 2, 又: 2, 三: 3,
+  干: 3, 于: 3, 亏: 3, 士: 3, 土: 3, 才: 3, 寸: 3, 下: 3, 大: 3, 丈: 3,
+  与: 3, 万: 3, 上: 3, 小: 3, 口: 3, 巾: 3, 山: 3, 千: 3, 乞: 3, 川: 3,
+  亿: 3, 个: 3, 勺: 3, 久: 3, 凡: 3, 及: 3, 夕: 3, 丸: 3, 么: 3, 广: 3,
+  亡: 3, 门: 3, 义: 3, 之: 3, 尸: 3, 弓: 3, 己: 3, 已: 3, 子: 3, 卫: 3,
+  也: 3, 女: 3, 飞: 3, 刃: 3, 习: 3, 叉: 3, 马: 3, 乡: 3, 丰: 4, 王: 4,
+  井: 4, 开: 4, 夫: 4, 天: 4, 无: 4, 元: 4, 专: 4, 云: 4, 扎: 4, 艺: 4,
+  木: 4, 五: 4, 支: 4, 厅: 4, 不: 4, 太: 4, 犬: 4, 区: 4, 历: 4, 尤: 4,
+  森: 12, 想: 13, 谢: 12,
+  友: 4, 匹: 4, 车: 4, 巨: 4, 牙: 4, 屯: 4, 比: 4, 互: 4, 切: 4, 瓦: 4,
+  止: 4, 少: 4, 日: 4, 中: 4, 冈: 4, 贝: 4, 内: 4, 水: 4, 见: 4, 午: 4,
+  牛: 4, 手: 4, 毛: 4, 气: 4, 升: 4, 长: 4, 仁: 4, 什: 4, 片: 4, 仆: 4,
+  化: 4, 仇: 4, 币: 4, 仍: 4, 仅: 4, 斤: 4, 爪: 4, 反: 4, 介: 4, 父: 4,
+  从: 4, 今: 4, 凶: 4, 分: 4, 乏: 4, 公: 4, 仓: 4, 月: 4, 氏: 4, 勿: 4,
+  欠: 4, 风: 4, 丹: 4, 匀: 4, 乌: 4, 凤: 4, 勾: 4, 文: 4, 六: 4, 方: 4,
+  火: 4, 为: 4, 斗: 4, 忆: 4, 订: 4, 计: 4, 户: 4, 认: 4, 心: 4, 尺: 4,
+  引: 4, 丑: 4, 巴: 4, 孔: 4, 队: 4, 办: 4, 以: 4, 允: 4, 予: 4, 劝: 4,
+  双: 4, 书: 4, 幻: 4, 玉: 5, 刊: 5, 示: 5, 末: 5, 未: 5, 击: 5, 打: 5,
+  巧: 5, 正: 5, 扑: 5, 卉: 5, 扒: 5, 功: 5, 扔: 5, 去: 5, 甘: 5, 世: 5,
+  古: 5, 节: 5, 本: 5, 术: 5, 可: 5, 丙: 5, 左: 5, 厉: 5, 石: 5, 右: 5,
+  布: 5, 夯: 5, 戊: 5, 龙: 5, 平: 5, 灭: 5, 轧: 5, 东: 5, 卡: 5, 北: 5,
+  占: 5, 业: 5, 旧: 5, 帅: 5, 归: 5, 且: 5, 旦: 5, 目: 5, 叶: 5, 甲: 5,
+  申: 5, 叮: 5, 电: 5, 号: 5, 田: 5, 由: 5, 只: 5, 叭: 5, 史: 5, 央: 5,
+  兄: 5, 叼: 5, 叫: 5, 另: 5, 叨: 5, 叹: 5, 四: 5, 生: 5, 失: 5, 禾: 5,
+  丘: 5, 付: 5, 仗: 5, 代: 5, 仙: 5, 们: 5, 仪: 5, 白: 5, 仔: 5, 他: 5,
+  斥: 5, 瓜: 5, 乎: 5, 丛: 5, 令: 5, 用: 5, 甩: 5, 印: 5, 乐: 5, 句: 5,
+  匆: 5, 册: 5, 犯: 5, 外: 5, 处: 5, 冬: 5, 鸟: 5, 务: 5, 包: 5, 饥: 5,
+  主: 5, 市: 5, 立: 5, 闪: 5, 兰: 5, 半: 5, 汁: 5, 汇: 5, 头: 5, 汉: 5,
+  宁: 5, 穴: 5, 它: 5, 讨: 5, 写: 5, 让: 5, 礼: 5, 训: 5, 必: 5, 议: 5,
+  讯: 5, 记: 5, 永: 5, 司: 5, 尼: 5, 民: 5, 出: 5, 辽: 5, 奶: 5, 奴: 5,
+  加: 5, 召: 5, 皮: 5, 边: 5, 发: 5, 孕: 5, 圣: 5, 对: 5, 台: 5, 矛: 5,
+  纠: 5, 母: 5, 幼: 5, 丝: 5, 式: 6, 刑: 6, 动: 6, 扛: 6, 寺: 6, 吉: 6,
+  扣: 6, 考: 6, 托: 6, 老: 6, 执: 6, 巩: 6, 圾: 6, 扩: 6, 扫: 6, 地: 6,
+  扬: 6, 场: 6, 耳: 6, 共: 6, 芒: 6, 亚: 6, 芝: 6, 朽: 6, 朴: 6, 机: 6,
+  权: 6, 过: 6, 臣: 6, 再: 6, 协: 6, 西: 6, 压: 6, 厌: 6, 在: 6, 有: 6,
+  百: 6, 存: 6, 而: 6, 页: 6, 匠: 6, 夸: 6, 夺: 6, 灰: 6, 达: 6, 列: 6,
+  死: 6, 成: 6, 夹: 6, 夷: 6, 轨: 6, 邪: 6, 尧: 6, 划: 6, 迈: 6, 毕: 6,
+  至: 6, 此: 6, 贞: 6, 师: 6, 尘: 6, 尖: 6, 劣: 6, 光: 6, 当: 6, 早: 6,
+  吐: 6, 吓: 6, 虫: 6, 曲: 6, 团: 6, 同: 6, 吊: 6, 吃: 6, 因: 6, 吸: 6,
+  吗: 6, 屿: 6, 帆: 6, 岁: 6, 回: 6, 岂: 6, 刚: 6, 则: 6, 肉: 6, 网: 6,
+  年: 6, 朱: 6, 先: 6, 丢: 6, 舌: 6, 竹: 6, 迁: 6, 乔: 6, 伟: 6, 传: 6,
+  乒: 6, 乓: 6, 休: 6, 伍: 6, 伏: 6, 优: 6, 伐: 6, 延: 6, 件: 6, 任: 6,
+  伤: 6, 价: 6, 份: 6, 华: 6, 仰: 6, 仿: 6, 伙: 6, 伪: 6, 自: 6, 血: 6,
+  向: 6, 似: 6, 后: 6, 行: 6, 舟: 6, 全: 6, 会: 6, 杀: 6, 合: 6, 兆: 6,
+  企: 6, 众: 6, 爷: 6, 伞: 6, 创: 6, 肌: 6, 朵: 6, 杂: 6, 危: 6, 旬: 6,
+  旨: 6, 负: 6, 各: 6, 名: 6, 多: 6, 争: 6, 色: 6, 壮: 6, 冲: 6, 冰: 6,
+  庄: 6, 庆: 6, 亦: 6, 刘: 6, 齐: 6, 交: 6, 次: 6, 衣: 6, 产: 6, 决: 6,
+  充: 6, 妄: 6, 闭: 6, 问: 6, 闯: 6, 羊: 6, 并: 6, 关: 6, 米: 6, 灯: 6,
+  州: 6, 汗: 6, 污: 6, 江: 6, 池: 6, 汤: 6, 忙: 6, 兴: 6, 宇: 6, 守: 6,
+  宅: 6, 字: 6, 安: 6, 讲: 6, 军: 6, 许: 6, 论: 6, 农: 6, 讽: 6, 设: 6,
+  访: 6, 寻: 6, 那: 6, 迅: 6, 尽: 6, 导: 6, 异: 6, 孙: 6, 阵: 6, 阳: 6,
+  收: 6, 阶: 6, 阴: 6, 防: 6, 奸: 6, 如: 6, 妇: 6, 好: 6, 她: 6, 妈: 6,
+  戏: 6, 羽: 6, 观: 6, 欢: 6, 买: 6, 红: 6, 纤: 6, 级: 6, 约: 6, 纪: 6,
+  驰: 6, 巡: 6, 寿: 7, 弄: 7, 麦: 7, 形: 7, 进: 7, 戒: 7, 吞: 7, 远: 7,
+  违: 7, 运: 7, 扶: 7, 抚: 7, 坛: 7, 技: 7, 坏: 7, 扰: 7, 拒: 7, 找: 7,
+  批: 7, 扯: 7, 址: 7, 走: 7, 抄: 7, 坝: 7, 贡: 7, 攻: 7, 赤: 7, 折: 7,
+  抓: 7, 扳: 7, 抡: 7, 扮: 7, 抢: 7, 孝: 7, 均: 7, 抛: 7, 投: 7, 坟: 7,
+  抗: 7, 坑: 7, 坊: 7, 抖: 7, 护: 7, 壳: 7, 志: 7, 扭: 7, 块: 7, 声: 7,
+  把: 7, 报: 7, 却: 7, 劫: 7, 芽: 7, 花: 7, 芹: 7, 芬: 7, 苍: 7, 芳: 7,
+  严: 7, 芦: 7, 劳: 7, 克: 7, 苏: 7, 杆: 7, 杠: 7, 杜: 7, 材: 7, 村: 7,
+  杏: 7, 极: 7, 李: 7, 杨: 7, 求: 7, 更: 7, 束: 7, 豆: 7, 两: 7, 丽: 7,
+  医: 7, 辰: 7, 励: 7, 否: 7, 还: 7, 歼: 7, 来: 7, 连: 7, 步: 7, 坚: 7,
+  旱: 7, 盯: 7, 呈: 7, 时: 7, 吴: 7, 助: 7, 县: 7, 里: 7, 呆: 7, 园: 7,
+  旷: 7, 围: 7, 呀: 7, 吨: 7, 足: 7, 邮: 7, 男: 7, 困: 7, 吵: 7, 串: 7,
+  员: 7, 听: 7, 吩: 7, 吹: 7, 呜: 7, 吧: 7, 吼: 7, 别: 7, 岗: 7, 帐: 7,
+  财: 7, 针: 7, 钉: 7, 告: 7, 我: 7, 乱: 7, 利: 7, 秃: 7, 秀: 7, 私: 7,
+  每: 7, 兵: 7, 估: 7, 体: 7, 何: 7, 但: 7, 伸: 7, 作: 7, 伯: 7, 伶: 7,
+  佣: 7, 低: 7, 你: 7, 住: 7, 位: 7, 伴: 7, 身: 7, 皂: 7, 佛: 7, 近: 7,
+  彻: 7, 役: 7, 返: 7, 余: 7, 希: 7, 坐: 7, 谷: 7, 妥: 7, 含: 7, 邻: 7,
+  岔: 7, 肝: 7, 肚: 7, 肠: 7, 龟: 7, 免: 7, 狂: 7, 犹: 7, 角: 7, 删: 7,
+  条: 7, 卵: 7, 岛: 7, 迎: 7, 饭: 7, 饮: 7, 系: 7, 言: 7, 冻: 7, 状: 7,
+  亩: 7, 况: 7, 床: 7, 库: 7, 疗: 7, 应: 7, 冷: 7, 这: 7, 序: 7, 辛: 7,
+  弃: 7, 冶: 7, 忘: 7, 闲: 7, 间: 7, 闷: 7, 判: 7, 灶: 7, 灿: 7, 弟: 7,
+  汪: 7, 沙: 7, 汽: 7, 沃: 7, 泛: 7, 沟: 7, 没: 7, 沈: 7, 沉: 7, 怀: 7,
+  忧: 7, 快: 7, 完: 7, 宋: 7, 宏: 7, 牢: 7, 究: 7, 穷: 7, 灾: 7, 良: 7,
+  证: 7, 启: 7, 评: 7, 补: 7, 初: 7, 社: 7, 识: 7, 诉: 7, 诊: 7, 词: 7,
+  译: 7, 君: 7, 灵: 7, 即: 7, 层: 7, 尿: 7, 尾: 7, 迟: 7, 局: 7, 改: 7,
+  张: 7, 忌: 7, 际: 7, 陆: 7, 阿: 7, 陈: 7, 阻: 7, 附: 7, 妙: 7, 妖: 7,
+  妨: 7, 努: 7, 忍: 7, 劲: 7, 鸡: 7, 驱: 7, 纯: 7, 纱: 7, 纳: 7, 纲: 7,
+  驳: 7,   纵: 7, 纷: 7, 纸: 7, 纹: 7, 纺: 7, 驴: 7, 纽: 7,
+  奉: 8, 玩: 8, 环: 8, 武: 8, 青: 8, 责: 8, 现: 8, 表: 8, 规: 8, 抹: 8,
+  拢: 8, 拔: 8, 拣: 8, 担: 8, 坦: 8, 押: 8, 抽: 8, 拐: 8, 拖: 8, 拍: 8,
+  者: 8, 顶: 8, 拆: 8, 拥: 8, 抵: 8, 拘: 8, 势: 8, 抱: 8, 垃: 8, 拉: 8,
+  拦: 8, 拌: 8, 幸: 8, 招: 8, 坡: 8, 披: 8, 拨: 8, 择: 8, 抬: 8, 其: 8,
+  取: 8, 苦: 8, 若: 8, 茂: 8, 苹: 8, 苗: 8, 英: 8, 范: 8, 直: 8, 茄: 8,
+  茎: 8, 茅: 8, 林: 8, 枝: 8, 杯: 8, 柜: 8, 析: 8, 板: 8, 松: 8, 枪: 8,
+  构: 8, 杰: 8, 述: 8, 枕: 8, 丧: 8, 或: 8, 画: 8, 卧: 8, 事: 8, 刺: 8,
+  枣: 8, 雨: 8, 卖: 8, 矿: 8, 码: 8, 厕: 8, 奔: 8, 奇: 8, 奋: 8, 态: 8,
+  欧: 8, 垄: 8, 妻: 8, 轰: 8, 顷: 8, 转: 8, 斩: 8, 轮: 8, 软: 8, 到: 8,
+  非: 8, 叔: 8, 肯: 8, 齿: 8, 些: 8, 虎: 8, 虏: 8, 肾: 8, 贤: 8, 尚: 8,
+  旺: 8, 具: 8, 果: 8, 味: 8, 昆: 8, 国: 8, 昌: 8, 畅: 8, 明: 8, 易: 8,
+  昂: 8, 典: 8, 固: 8, 忠: 8, 咐: 8, 呼: 8, 鸣: 8, 呢: 8, 岸: 8, 岩: 8,
+  帖: 8, 罗: 8, 帜: 8, 岭: 8, 凯: 8, 败: 8, 贩: 8, 购: 8, 图: 8, 钓: 8,
+  制: 8, 知: 8, 垂: 8, 牧: 8, 物: 8, 乖: 8, 刮: 8, 秆: 8, 和: 8, 季: 8,
+  委: 8, 佳: 8, 侍: 8, 供: 8, 使: 8, 例: 8, 版: 8, 侄: 8, 侦: 8, 侧: 8,
+  凭: 8, 侨: 8, 佩: 8, 货: 8, 依: 8, 的: 8, 迫: 8, 质: 8, 欣: 8, 征: 8,
+  往: 8, 爬: 8, 彼: 8, 径: 8, 所: 8, 舍: 8, 金: 8, 命: 8, 斧: 8, 爸: 8,
+  采: 8, 受: 8, 乳: 8, 贪: 8, 念: 8, 贫: 8, 肤: 8, 肺: 8, 肢: 8, 肿: 8,
+  胀: 8, 朋: 8, 股: 8, 肥: 8, 服: 8, 胁: 8, 周: 8, 昏: 8, 鱼: 8, 兔: 8,
+  狐: 8, 忽: 8, 狗: 8, 备: 8, 饰: 8, 饱: 8, 饲: 8, 变: 8, 京: 8, 享: 8,
+  店: 8, 夜: 8, 庙: 8, 府: 8, 底: 8, 剂: 8, 郊: 8, 废: 8, 净: 8, 盲: 8,
+  放: 8, 刻: 8, 育: 8, 闸: 8, 闹: 8, 郑: 8, 券: 8, 卷: 8, 单: 8, 炒: 8,
+  炊: 8, 炕: 8, 炎: 8, 炉: 8, 沫: 8, 浅: 8, 法: 8, 泄: 8, 河: 8, 沾: 8,
+  泪: 8, 油: 8, 泊: 8, 沿: 8, 泡: 8, 注: 8, 泻: 8, 泳: 8, 泥: 8, 沸: 8,
+  波: 8, 泼: 8, 泽: 8, 治: 8, 怖: 8, 性: 8, 怕: 8, 怜: 8, 怪: 8, 学: 8,
+  宝: 8, 宗: 8, 定: 8, 宜: 8, 审: 8, 宙: 8, 官: 8, 空: 8, 帘: 8, 实: 8,
+  试: 8, 郎: 8, 诗: 8, 肩: 8, 房: 8, 诚: 8, 衬: 8, 衫: 8, 视: 8, 话: 8,
+  诞: 8, 询: 8, 该: 8, 详: 8, 建: 8, 肃: 8, 录: 8, 隶: 8, 居: 8, 届: 8,
+  刷: 8, 屈: 8, 弦: 8, 承: 8, 孟: 8, 孤: 8, 陕: 8, 降: 8, 限: 8, 妹: 8,
+  姑: 8, 姐: 8, 姓: 8, 始: 8, 姆: 8, 虱: 8, 驾: 8, 参: 8, 艰: 8, 线: 8,
+  练: 8, 组: 8, 细: 8, 驶: 8, 织: 8, 终: 8, 驻: 8, 驼: 8, 绍: 8, 经: 8,
+  贯: 8, 奏: 9, 春: 9, 帮: 9, 珍: 9, 玻: 9, 毒: 9, 型: 9, 挂: 9, 封: 9,
+  持: 9, 项: 9, 垮: 9, 挎: 9, 城: 9, 挠: 9, 政: 9, 赴: 9, 赵: 9, 挡: 9,
+  挺: 9, 括: 9, 拴: 9, 拾: 9, 挑: 9, 指: 9, 垫: 9, 挣: 9, 挤: 9, 拼: 9,
+  挖: 9, 按: 9, 挥: 9, 挪: 9, 某: 9, 甚: 9, 革: 9, 荐: 9, 巷: 9, 带: 9,
+  草: 9, 茧: 9, 茶: 9, 荒: 9, 茫: 9, 荡: 9, 荣: 9, 故: 9, 胡: 9, 南: 9,
+  药: 9, 标: 9, 枯: 9, 柄: 9, 栋: 9, 相: 9, 查: 9, 柏: 9, 柳: 9, 柱: 9,
+  柿: 9, 栏: 9, 树: 9, 要: 9, 咸: 9, 威: 9, 歪: 9, 研: 9, 砖: 9, 厘: 9,
+  厚: 9, 砌: 9, 砍: 9, 面: 9, 耐: 9, 耍: 9, 牵: 9, 残: 9, 殃: 9, 轻: 9,
+  鸦: 9, 皆: 9, 背: 9, 战: 9, 点: 9, 临: 9, 览: 9, 竖: 9, 省: 9, 削: 9,
+  尝: 9, 是: 9, 盼: 9, 眨: 9, 哄: 9, 显: 9, 哑: 9, 冒: 9, 映: 9, 星: 9,
+  昨: 9, 畏: 9, 趴: 9, 胃: 9, 贵: 9, 界: 9, 虹: 9, 虾: 9, 蚁: 9, 思: 9,
+  蚂: 9, 虽: 9, 品: 9, 咽: 9, 骂: 9, 哗: 9, 咱: 9, 响: 9, 哈: 9, 咬: 9,
+  咳: 9, 哪: 9, 炭: 9, 峡: 9, 罚: 9, 贱: 9, 贴: 9, 骨: 9, 钞: 9, 钟: 9,
+  钢: 9, 钠: 9, 钥: 9, 钩: 9, 卸: 9, 缸: 9, 拜: 9, 看: 9, 矩: 9, 怎: 9,
+  牲: 9, 选: 9, 适: 9, 秒: 9, 香: 9, 种: 9, 秋: 9, 科: 9, 重: 9, 复: 9,
+  竿: 9, 段: 9, 便: 9, 俩: 9, 贷: 9, 顺: 9, 修: 9, 保: 9, 促: 9, 侮: 9,
+  俭: 9, 俗: 9, 俘: 9, 信: 9, 皇: 9, 泉: 9, 鬼: 9, 侵: 9, 追: 9, 俊: 9,
+  盾: 9, 待: 9, 律: 9, 很: 9, 须: 9, 叙: 9, 剑: 9, 逃: 9, 食: 9, 盆: 9,
+  胆: 9, 胜: 9, 胞: 9, 胖: 9, 脉: 9, 勉: 9, 狭: 9, 狮: 9, 独: 9, 狡: 9,
+  狱: 9, 狠: 9, 贸: 9, 怨: 9, 急: 9, 饶: 9, 蚀: 9, 饺: 9, 饼: 9, 弯: 9,
+  将: 9, 奖: 9, 哀: 9, 亭: 9, 亮: 9, 度: 9, 迹: 9, 庭: 9, 疮: 9, 疯: 9,
+  疫: 9, 疤: 9, 姿: 9, 亲: 9, 音: 9, 帝: 9, 施: 9, 闻: 9, 阁: 9, 差: 9,
+  养: 9, 美: 9, 姜: 9, 叛: 9, 送: 9, 类: 9, 迷: 9, 前: 9, 首: 9, 逆: 9,
+  总: 9, 炼: 9, 炸: 9, 炮: 9, 烂: 9, 剃: 9, 洁: 9, 洪: 9, 洒: 9, 浇: 9,
+  浊: 9, 洞: 9, 测: 9, 洗: 9, 活: 9, 派: 9, 洽: 9, 染: 9, 济: 9, 洋: 9,
+  洲: 9, 浑: 9, 浓: 9, 津: 9, 恒: 9, 恢: 9, 恰: 9, 恼: 9, 恨: 9, 举: 9,
+  觉: 9, 宣: 9, 室: 9, 宫: 9, 宪: 9, 突: 9, 穿: 9, 窃: 9, 客: 9, 冠: 9,
+  语: 9, 扁: 9, 袄: 9, 祖: 9, 神: 9, 祝: 9, 误: 9, 诱: 9, 说: 9, 诵: 9,
+  垦: 9, 退: 9, 既: 9, 屋: 9, 昼: 9, 费: 9, 陡: 9, 眉: 9, 孩: 9, 除: 9,
+  险: 9, 院: 9, 娃: 9, 姥: 9, 姨: 9, 姻: 9, 娇: 9, 怒: 9, 架: 9, 贺: 9,
+  盈: 9, 勇: 9, 怠: 9, 柔: 9, 垒: 9, 绑: 9, 绒: 9, 结: 9, 绕: 9, 骄: 9,
+  绘: 9, 给: 9, 绚: 9, 骆: 9, 络: 9, 绝: 9, 绞: 9, 统: 9,
+};
+
+/** 查询汉字笔画数（未知返回 0） */
+export function charStrokes(ch: string): number {
+  return STROKE_TABLE[ch] ?? 0;
+}
+
+/** 根据部件粗略推断汉字结构 */
+export function charStructure(ch: string, parts: string[]): CharStructure {
+  if (parts.length >= 3) {
+    if (parts.length === 3 && parts[0] === parts[1] && parts[1] === parts[2])
+      return "品字";
+    return "左中右";
+  }
+  if (parts.length === 2) {
+    const [a] = parts;
+    if (["宀", "艹", "竹", "雨", "穴", "疒"].includes(a)) return "上下";
+    if (["辶", "廴", "勹", "匚", "冂", "门", "囗"].includes(a)) return "半包围";
+    if (a === "囗") return "全包围";
+    return "左右";
+  }
+  return "独体";
+}
+
+/** 汉字拆解（拼音走 pinyin-pro，部件走内置表，结构启发式推断） */
+export function decomposeChar(ch: string): CharDecomposeResult {
+  const isHan = /[\u4e00-\u9fff\u3400-\u4dbf]/.test(ch);
+  const parts = CHAR_DECOMPOSE[ch] ?? [];
+  const structure = charStructure(ch, parts);
+  let py = "";
+  let plain = "";
+  try {
+    py = pinyin(ch, { toneType: "symbol", type: "array", multiple: true }).join("/");
+    plain = pinyin(ch, { toneType: "none", type: "array" }).join("");
+  } catch {
+    py = "";
+    plain = "";
+  }
+  return {
+    char: ch,
+    isHan,
+    parts,
+    structure,
+    strokes: charStrokes(ch),
+    pinyin: py,
+    pinyinPlain: plain,
+  };
+}
+
+/** 常见偏旁部首列表（用于展示/校验） */
+export function isCommonRadical(ch: string): boolean {
+  return RADICALS.includes(ch);
+}
+
+/* ------------------------------------------------------------------ */
+/* 星座罗盘（太阳星座 + 月亮星座 + 上升星座 + 元素 + 配对）               */
+/* ------------------------------------------------------------------ */
+
+export interface ZodiacSign {
+  index: number;
+  name: string;
+  /** 英文名 */
+  en: string;
+  /** 起止日期（含起） */
+  from: [number, number];
+  to: [number, number];
+  element: "火" | "土" | "风" | "水";
+  /** 四正（本位 / 固定 / 变动） */
+  mode: "本位" | "固定" | "变动";
+  symbol: string;
+  /** 关键词 */
+  keywords: string;
+}
+
+export const ZODIAC_SIGNS: ZodiacSign[] = [
+  {
+    index: 0,
+    name: "白羊座",
+    en: "Aries",
+    from: [3, 21],
+    to: [4, 19],
+    element: "火",
+    mode: "本位",
+    symbol: "♈",
+    keywords: "热情、冲动、开创",
+  },
+  {
+    index: 1,
+    name: "金牛座",
+    en: "Taurus",
+    from: [4, 20],
+    to: [5, 20],
+    element: "土",
+    mode: "固定",
+    symbol: "♉",
+    keywords: "稳健、务实、执着",
+  },
+  {
+    index: 2,
+    name: "双子座",
+    en: "Gemini",
+    from: [5, 21],
+    to: [6, 21],
+    element: "风",
+    mode: "变动",
+    symbol: "♊",
+    keywords: "机敏、多变、善谈",
+  },
+  {
+    index: 3,
+    name: "巨蟹座",
+    en: "Cancer",
+    from: [6, 22],
+    to: [7, 22],
+    element: "水",
+    mode: "本位",
+    symbol: "♋",
+    keywords: "体贴、敏感、顾家",
+  },
+  {
+    index: 4,
+    name: "狮子座",
+    en: "Leo",
+    from: [7, 23],
+    to: [8, 22],
+    element: "火",
+    mode: "固定",
+    symbol: "♌",
+    keywords: "自信、慷慨、主导",
+  },
+  {
+    index: 5,
+    name: "处女座",
+    en: "Virgo",
+    from: [8, 23],
+    to: [9, 22],
+    element: "土",
+    mode: "变动",
+    symbol: "♍",
+    keywords: "细致、严谨、完美",
+  },
+  {
+    index: 6,
+    name: "天秤座",
+    en: "Libra",
+    from: [9, 23],
+    to: [10, 23],
+    element: "风",
+    mode: "本位",
+    symbol: "♎",
+    keywords: "平衡、社交、审美",
+  },
+  {
+    index: 7,
+    name: "天蝎座",
+    en: "Scorpio",
+    from: [10, 24],
+    to: [11, 22],
+    element: "水",
+    mode: "固定",
+    symbol: "♏",
+    keywords: "深沉、专注、洞察",
+  },
+  {
+    index: 8,
+    name: "射手座",
+    en: "Sagittarius",
+    from: [11, 23],
+    to: [12, 21],
+    element: "火",
+    mode: "变动",
+    symbol: "♐",
+    keywords: "自由、乐观、探索",
+  },
+  {
+    index: 9,
+    name: "摩羯座",
+    en: "Capricorn",
+    from: [12, 22],
+    to: [1, 19],
+    element: "土",
+    mode: "本位",
+    symbol: "♑",
+    keywords: "坚毅、自律、务实",
+  },
+  {
+    index: 10,
+    name: "水瓶座",
+    en: "Aquarius",
+    from: [1, 20],
+    to: [2, 18],
+    element: "风",
+    mode: "固定",
+    symbol: "♒",
+    keywords: "独立、创新、博爱",
+  },
+  {
+    index: 11,
+    name: "双鱼座",
+    en: "Pisces",
+    from: [2, 19],
+    to: [3, 20],
+    element: "水",
+    mode: "变动",
+    symbol: "♓",
+    keywords: "浪漫、共情、想象",
+  },
+];
+
+export const ZODIAC_ELEMENT_COLOR: Record<string, string> = {
+  火: "#f5222d",
+  土: "#8c6d3f",
+  风: "#13c2c2",
+  水: "#1677ff",
+};
+
+/** 公历月日 → 太阳星座 */
+export function sunSignOf(month: number, day: number): ZodiacSign {
+  for (const s of ZODIAC_SIGNS) {
+    const [fm, fd] = s.from;
+    const [tm, td] = s.to;
+    if (fm <= tm) {
+      if ((month === fm && day >= fd) || (month === tm && day <= td)) return s;
+      if (month > fm && month < tm) return s;
+    } else {
+      // 跨年（摩羯座）
+      if ((month === fm && day >= fd) || (month === tm && day <= td)) return s;
+    }
+  }
+  return ZODIAC_SIGNS[0];
+}
+
+/** 简化星座角标计算：返回黄道上 0..11 的星座序号（每宫 30°） */
+export function signIndexFromLongitude(lon: number): number {
+  const norm = ((lon % 360) + 360) % 360;
+  return Math.floor(norm / 30) % 12;
+}
+
+/**
+ * 估算月亮星座（简化算法）。
+ * 真实月亮星座需星历，这里用「月亮日均行约 13.176°」粗略推算：
+ * 以 2000-01-01 00:00 UTC 月亮黄经约 218.32° 为基准，按天数推进。
+ * 结果仅供娱乐参考。
+ */
+export function moonSignOf(date: Date): ZodiacSign {
+  const base = Date.UTC(2000, 0, 1, 0, 0, 0);
+  const days = (date.getTime() - base) / MS_PER_LUNAR_DAY;
+  const lon = (218.32 + 13.176396 * days) % 360;
+  return ZODIAC_SIGNS[signIndexFromLongitude(lon)];
+}
+
+/**
+ * 估算上升星座（简化算法）。
+ * 用「春分点为基准 + 恒星时」的粗略近似：以出生时刻的地方恒星时映射黄道上升点。
+ * 需知道出生时间与经度（此处用东八区 120°E 近似），结果仅供娱乐参考。
+ */
+export function ascendantSignOf(date: Date): ZodiacSign {
+  // 儒略日
+  const jd = date.getTime() / MS_PER_LUNAR_DAY + 2440587.5;
+  const t = (jd - 2451545.0) / 36525;
+  // 格林尼治平恒星时（度）
+  let gmst = 280.46061837 + 360.98564736629 * (jd - 2451545.0) +
+    0.000387933 * t * t;
+  gmst = ((gmst % 360) + 360) % 360;
+  // 东八区经度 120°E 的地方恒星时
+  const lst = (gmst + 120) % 360;
+  // 上升点黄经近似（忽略黄赤交角细化，取地方恒星时 + 90°）
+  const ascLon = (lst + 90) % 360;
+  return ZODIAC_SIGNS[signIndexFromLongitude(ascLon)];
+}
+
+export interface ZodiacInfo {
+  date: Date;
+  sun: ZodiacSign;
+  moon: ZodiacSign;
+  ascendant: ZodiacSign;
+  /** 太阳在黄道上的近似经度（度） */
+  sunLongitude: number;
+}
+
+/** 综合排盘（太阳 / 月亮 / 上升） */
+export function zodiacInfo(date: Date): ZodiacInfo {
+  const sun = sunSignOf(date.getMonth() + 1, date.getDate());
+  return {
+    date,
+    sun,
+    moon: moonSignOf(date),
+    ascendant: ascendantSignOf(date),
+    sunLongitude: sun.index * 30 + 15,
+  };
+}
+
+/** 星座元素分布（对一组星座统计火/土/风/水） */
+export function elementDistribution(
+  signs: ZodiacSign[],
+): Record<string, number> {
+  const out: Record<string, number> = { 火: 0, 土: 0, 风: 0, 水: 0 };
+  for (const s of signs) out[s.element] = (out[s.element] ?? 0) + 1;
+  return out;
+}
+
+/** 星座配对评分（同元素 +2，同四正 +1，对宫 +3，其余 0，映射到 60-100） */
+export function zodiacCompatibility(a: ZodiacSign, b: ZodiacSign): {
+  score: number;
+  desc: string;
+} {
+  let raw = 0;
+  const pairs: string[] = [];
+  if (a.element === b.element) {
+    raw += 2;
+    pairs.push("同元素，相处自然");
+  }
+  if (a.mode === b.mode) {
+    raw += 1;
+    pairs.push("同四正，节奏一致");
+  }
+  if (Math.abs(a.index - b.index) === 6) {
+    raw += 3;
+    pairs.push("对宫星座，互补吸引");
+  }
+  const score = Math.min(100, 60 + raw * 10);
+  const desc = pairs.length ? pairs.join("；") : "元素与四正皆不同，需要更多理解与磨合";
+  return { score, desc };
+}
+
+/* ------------------------------------------------------------------ */
+/* 科学计算器（在基础表达式之上扩展数学函数 / 常量 / 统计）               */
+/* ------------------------------------------------------------------ */
+
+/** 科学计算器支持的额外数学函数（供 UI 提示展示） */
+export const SCI_FUNCTIONS: { name: string; desc: string }[] = [
+  { name: "sqrt(x)", desc: "平方根" },
+  { name: "cbrt(x)", desc: "立方根" },
+  { name: "pow(x,y)", desc: "x 的 y 次方" },
+  { name: "exp(x)", desc: "e 的 x 次方" },
+  { name: "ln(x) / log(x)", desc: "自然对数 / 常用对数" },
+  { name: "log2(x)", desc: "以 2 为底的对数" },
+  { name: "log(b,x)", desc: "以 b 为底 x 的对数" },
+  { name: "sin/cos/tan(x)", desc: "三角函数（随角度制）" },
+  { name: "asin/acos/atan(x)", desc: "反三角函数" },
+  { name: "sinh/cosh/tanh(x)", desc: "双曲函数" },
+  { name: "abs(x)", desc: "绝对值" },
+  { name: "round/floor/ceil(x)", desc: "取整" },
+  { name: "min/max(a,b,…)", desc: "极值" },
+  { name: "fact(n)", desc: "阶乘" },
+  { name: "gcd(a,b) / lcm(a,b)", desc: "最大公约数 / 最小公倍数" },
+  { name: "hypot(a,b)", desc: "直角三角形斜边" },
+  { name: "nCr(n,r) / nPr(n,r)", desc: "组合数 / 排列数" },
+];
+
+/** 科学计算器常量 */
+export const SCI_CONSTANTS: { name: string; value: number; desc: string }[] = [
+  { name: "pi", value: Math.PI, desc: "圆周率 π" },
+  { name: "e", value: Math.E, desc: "自然常数 e" },
+];
+
+/** 角度制 / 弧度制互转 */
+export function toRadians(deg: number): number {
+  return (deg * Math.PI) / 180;
+}
+export function toDegrees(rad: number): number {
+  return (rad * 180) / Math.PI;
+}
+
+/** 阶乘（非负整数） */
+export function factorial(n: number): number {
+  if (n < 0 || !Number.isInteger(n)) throw new Error("阶乘仅支持非负整数");
+  if (n > 170) return Infinity;
+  let r = 1;
+  for (let i = 2; i <= n; i++) r *= i;
+  return r;
+}
+
+/** 最大公约数（欧几里得算法，支持负数） */
+export function gcd(a: number, b: number): number {
+  let x = Math.abs(Math.round(a));
+  let y = Math.abs(Math.round(b));
+  while (y) [x, y] = [y, x % y];
+  return x;
+}
+
+/** 最小公倍数 */
+export function lcm(a: number, b: number): number {
+  const g = gcd(a, b);
+  return g === 0 ? 0 : Math.abs(Math.round(a) * Math.round(b)) / g;
+}
+
+/** 组合数 nCr */
+export function nCr(n: number, r: number): number {
+  if (r < 0 || r > n) return 0;
+  let result = 1;
+  const k = Math.min(r, n - r);
+  for (let i = 1; i <= k; i++) result = (result * (n - k + i)) / i;
+  return Math.round(result);
+}
+
+/** 排列数 nPr */
+export function nPr(n: number, r: number): number {
+  if (r < 0 || r > n) return 0;
+  let result = 1;
+  for (let i = 0; i < r; i++) result *= n - i;
+  return Math.round(result);
+}
+
+const DEG_DEGREE_SYMBOL = "°";
+
+/** 角度格式化：把弧度转成「度°分′秒″」 */
+export function formatDms(radians: number): string {
+  const deg = toDegrees(radians);
+  const sign = deg < 0 ? "-" : "";
+  const abs = Math.abs(deg);
+  let d = Math.floor(abs);
+  let mFull = (abs - d) * 60;
+  let m = Math.floor(mFull);
+  let s = (mFull - m) * 60;
+  // 四舍五入到 0.01″，并处理进位（59.995″ → 60″ → 进 1′）
+  s = Math.round(s * 100) / 100;
+  if (s >= 60) {
+    s -= 60;
+    m += 1;
+  }
+  if (m >= 60) {
+    m -= 60;
+    d += 1;
+  }
+  return `${sign}${d}${DEG_DEGREE_SYMBOL}${m}′${s.toFixed(2)}″`;
+}
+
+/** 结果格式化：极大/极小转科学计数法，常规数按有效位裁剪 */
+export function formatNumber(value: number, precision = 12): string {
+  if (!Number.isFinite(value)) {
+    if (Number.isNaN(value)) return "NaN";
+    return value > 0 ? "∞" : "-∞";
+  }
+  if (value === 0) return "0";
+  const abs = Math.abs(value);
+  // 先判量级，避免大整数（如 1e20）被当作普通整数输出
+  if (abs >= 1e15 || abs < 1e-6) return value.toExponential(6);
+  if (Number.isInteger(value)) return String(value);
+  const rounded = Number(value.toPrecision(precision));
+  return String(rounded);
+}
+
+/* ------------------------------------------------------------------ */
+/* 统计计算（科学计算器辅助）                                           */
+/* ------------------------------------------------------------------ */
+
+export interface StatsSummary {
+  count: number;
+  sum: number;
+  mean: number;
+  median: number;
+  min: number;
+  max: number;
+  /** 样本标准差 */
+  stddev: number;
+  /** 总体标准差 */
+  stddevP: number;
+  variance: number;
+}
+
+/** 一组数值的描述统计 */
+export function summarizeNumbers(nums: number[]): StatsSummary | null {
+  const valid = nums.filter((n) => Number.isFinite(n));
+  if (valid.length === 0) return null;
+  const n = valid.length;
+  const sum = valid.reduce((a, b) => a + b, 0);
+  const mean = sum / n;
+  const sorted = [...valid].sort((a, b) => a - b);
+  const median =
+    n % 2 === 1
+      ? sorted[(n - 1) / 2]
+      : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+  const variance =
+    n > 1 ? valid.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1) : 0;
+  const varianceP = valid.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
+  return {
+    count: n,
+    sum,
+    mean,
+    median,
+    min: sorted[0],
+    max: sorted[n - 1],
+    stddev: Math.sqrt(variance),
+    stddevP: Math.sqrt(varianceP),
+    variance,
+  };
+}
+
+/** 解析以逗号 / 空格 / 换行分隔的数值列表 */
+export function parseNumberList(input: string): number[] {
+  return input
+    .split(/[\s,，、;；]+/)
+    .map((s) => s.trim())
+    .filter((s) => s !== "")
+    .map(Number)
+    .filter((n) => Number.isFinite(n));
 }
