@@ -20,6 +20,7 @@ import {
   weekdayLabel,
   hslToRgb,
   lineDiff,
+  matchPinyin,
   md5,
   parseHexColor,
   rgbToHex,
@@ -310,5 +311,23 @@ describe("时间计算", () => {
   it("weekdayLabel", () => {
     expect(weekdayLabel(new Date(2026, 9, 11))).toBe("星期日");
     expect(weekdayLabel(new Date(2026, 9, 12))).toBe("星期一");
+  });
+});
+
+describe("matchPinyin", () => {
+  it("支持中文原文、全拼与首字母匹配", () => {
+    expect(matchPinyin("哈希计算", "哈希")).toBe(true);
+    expect(matchPinyin("哈希计算", "haxijisuan")).toBe(true);
+    expect(matchPinyin("哈希计算", "hxjs")).toBe(true);
+    expect(matchPinyin("哈希计算", "HAXI")).toBe(true);
+    expect(matchPinyin("哈希计算", "mima")).toBe(false);
+  });
+  it("支持中英混排与普通英文", () => {
+    expect(matchPinyin("JSON 工具", "json")).toBe(true);
+    expect(matchPinyin("JSON 工具", "gj")).toBe(true);
+    expect(matchPinyin("Base64", "base")).toBe(true);
+  });
+  it("空查询恒命中", () => {
+    expect(matchPinyin("任意", "")).toBe(true);
   });
 });

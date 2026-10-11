@@ -10,6 +10,7 @@ import { Empty, Input, Tag } from "antd";
 import { TOOLS, type ToolDef } from "./tools/registry";
 import { pathToToolId, toolIdToPath } from "./routes";
 import { getPreferredToolId, setPreferredToolId } from "./preferences";
+import { matchPinyin } from "./utils";
 import ThemeShell from "./ThemeShell";
 
 interface Props {
@@ -46,10 +47,10 @@ const MenuView: React.FC<Props> = ({ sdk }) => {
     if (!q) return TOOLS;
     return TOOLS.filter(
       (t) =>
-        t.title.toLowerCase().includes(q) ||
-        t.desc.toLowerCase().includes(q) ||
-        t.id.toLowerCase().includes(q) ||
-        t.category.toLowerCase().includes(q),
+        matchPinyin(t.title, q) ||
+        matchPinyin(t.desc, q) ||
+        matchPinyin(t.category, q) ||
+        t.id.toLowerCase().includes(q),
     );
   }, [query]);
 

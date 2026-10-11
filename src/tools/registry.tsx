@@ -3,6 +3,7 @@
  */
 import React from "react";
 import {
+  BarcodeOutlined,
   BgColorsOutlined,
   CheckSquareOutlined,
   CodeOutlined,
@@ -10,10 +11,10 @@ import {
   DashboardOutlined,
   ExportOutlined,
   DiffOutlined,
+  ExperimentOutlined,
   FieldTimeOutlined,
   FileMarkdownOutlined,
   FileSearchOutlined,
-  FileTextOutlined,
   FontColorsOutlined,
   FontSizeOutlined,
   GlobalOutlined,
@@ -29,6 +30,8 @@ import {
   ClockCircleOutlined,
   ThunderboltOutlined,
   CalendarOutlined,
+  AimOutlined,
+  GiftOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -55,6 +58,10 @@ import TimerTool from "./TimerTool";
 import TodoTool from "./TodoTool";
 import MorseTool from "./MorseTool";
 import TimeCalcTool from "./TimeCalcTool";
+import BarcodeTool from "./BarcodeTool";
+import WheelTool from "./WheelTool";
+import PeriodicTableTool from "./PeriodicTableTool";
+import RandomStringTool from "./RandomStringTool";
 
 export type ToolCategory =
   | "文本"
@@ -127,7 +134,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "hash",
     title: "哈希计算",
-    desc: "MD5 与 SHA-1/256/384/512",
+    desc: "文本与文件（分块）MD5 / SHA-1/256/384/512",
     icon: SafetyCertificateOutlined,
     category: "开发",
     component: HashTool,
@@ -179,6 +186,14 @@ export const TOOLS: ToolDef[] = [
     icon: ThunderboltOutlined,
     category: "编码",
     component: MorseTool,
+  },
+  {
+    id: "barcode",
+    title: "条形码生成",
+    desc: "文本转 Code128 条形码，导出 SVG / PNG",
+    icon: BarcodeOutlined,
+    category: "生成",
+    component: BarcodeTool,
   },
   {
     id: "naming",
@@ -243,6 +258,30 @@ export const TOOLS: ToolDef[] = [
     icon: LockOutlined,
     category: "生成",
     component: PasswordTool,
+  },
+  {
+    id: "random-string",
+    title: "随机字符生成",
+    desc: "可自定义字符集，批量生成随机字符串",
+    icon: AimOutlined,
+    category: "生成",
+    component: RandomStringTool,
+  },
+  {
+    id: "wheel",
+    title: "转盘抽签",
+    desc: "加权随机转盘，动画抽签并可记录结果",
+    icon: GiftOutlined,
+    category: "生成",
+    component: WheelTool,
+  },
+  {
+    id: "periodic",
+    title: "元素周期表",
+    desc: "118 种元素，搜索 / 分类高亮 / 查看详情",
+    icon: ExperimentOutlined,
+    category: "数值",
+    component: PeriodicTableTool,
   },
   {
     id: "timer",

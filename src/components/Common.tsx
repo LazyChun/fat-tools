@@ -80,7 +80,7 @@ export const ToolShell: React.FC<{
       <div style={{ flex: 1 }} />
       {extra}
     </div>
-    <div style={{ flex: 1, minHeight: 0 }}>{children}</div>
+    <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>{children}</div>
   </div>
 );
 

@@ -11,6 +11,25 @@ import { clearHistory, listHistory, type HistoryRecord } from "../historyClient"
 
 const { Text } = Typography;
 
+/** action → 标签色，让不同动作一眼可辨 */
+const ACTION_COLOR: Record<string, string> = {
+  text: "blue",
+  file: "geekblue",
+  hash: "purple",
+  encode: "cyan",
+  decode: "cyan",
+  calculate: "green",
+  format: "orange",
+  parse: "volcano",
+  convert: "gold",
+  generate: "magenta",
+};
+
+/** 取 action 的展示色，未收录的用默认蓝 */
+function actionColor(action: string): string {
+  return ACTION_COLOR[String(action || "").toLowerCase()] || "blue";
+}
+
 interface Props {
   toolId: string;
   toolTitle: string;
@@ -62,9 +81,32 @@ const ToolHistoryPanel: React.FC<Props> = ({ toolId, toolTitle, onRestore, limit
         padding: "8px 12px",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: expanded ? 6 : 0 }}>
-        <HistoryOutlined style={{ opacity: 0.6 }} />
-        <Text type="secondary" style={{ fontSize: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          minHeight: 22,
+          flexWrap: "wrap",
+          rowGap: 4,
+          marginBottom: expanded ? 8 : 0,
+        }}
+      >
+        {/* 固定尺寸容器：避免 MF 宿主下 icon 基础样式缺失导致 svg 撑破行高、压到文字上 */}
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 16,
+            height: 16,
+            flexShrink: 0,
+            opacity: 0.65,
+          }}
+        >
+          <HistoryOutlined style={{ fontSize: 14, lineHeight: 1 }} />
+        </span>
+        <Text type="secondary" style={{ fontSize: 12, lineHeight: "20px", whiteSpace: "nowrap" }}>
           {toolTitle} · 历史记录（已落库 {items.length} 条，点击可恢复输入）
         </Text>
         <div style={{ flex: 1 }} />
@@ -91,8 +133,8 @@ const ToolHistoryPanel: React.FC<Props> = ({ toolId, toolTitle, onRestore, limit
           {items.length === 0 ? (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无记录" />
           ) : (
-            <div style={{ maxHeight: 180, overflow: "auto", display: "grid", gap: 2 }}>
-              {items.map((rec) => (
+            <div style={{ maxHeight: 180, overflow: "auto", display: "grid", gap: 4, marginTop: 2 }}>
+              {items.map((rec, i) => (
                 <div
                   key={rec.id}
                   onClick={() => onRestore(rec.detail || {}, rec)}
@@ -101,14 +143,23 @@ const ToolHistoryPanel: React.FC<Props> = ({ toolId, toolTitle, onRestore, limit
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    padding: "3px 6px",
+                    padding: "5px 8px",
                     borderRadius: 6,
                     cursor: "pointer",
+                    background: i % 2 === 0 ? "rgba(128,128,128,0.06)" : "transparent",
+                    borderLeft: `2px solid ${i % 2 === 0 ? "rgba(22,119,255,0.45)" : "transparent"}`,
+                    transition: "background 0.15s",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(22,119,255,0.08)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(22,119,255,0.12)")}
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = i % 2 === 0 ? "rgba(128,128,128,0.06)" : "transparent")
+                  }
                 >
-                  <Tag style={{ marginInlineEnd: 0, fontSize: 11, lineHeight: "16px" }} bordered={false}>
+                  <Tag
+                    color={actionColor(rec.action)}
+                    variant="filled"
+                    style={{ marginInlineEnd: 0, fontSize: 11, lineHeight: "16px", flexShrink: 0 }}
+                  >
                     {rec.action}
                   </Tag>
                   <Text

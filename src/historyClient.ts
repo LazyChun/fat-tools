@@ -129,9 +129,9 @@ export function recordUsage(input: RecordInput): void {  void (async () => {
         backendAvailable = false;
       }
     }
-    // localStorage 兜底
+    // localStorage 兜底（与后端 add_record 一致：连续重复只刷新时间不新增）
     const items = lsRead();
-    items.unshift({
+    const record: HistoryRecord = {
       id: Date.now(),
       toolId: input.toolId,
       toolTitle: input.toolTitle,
@@ -139,7 +139,19 @@ export function recordUsage(input: RecordInput): void {  void (async () => {
       summary: input.summary,
       detail: input.detail || {},
       createdAt: new Date().toISOString().slice(0, 19),
-    });
+    };
+    const idx = items.findIndex((i) => i.toolId === input.toolId);
+    const prev = idx >= 0 ? items[idx] : undefined;
+    if (
+      prev &&
+      prev.action === record.action &&
+      prev.summary === record.summary &&
+      JSON.stringify(prev.detail || {}) === JSON.stringify(record.detail)
+    ) {
+      record.id = prev.id;
+      items.splice(idx, 1);
+    }
+    items.unshift(record);
     lsWrite(items);
   })();
 }

@@ -108,6 +108,21 @@ def _get_conn() -> sqlite3.Connection:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_tool_history_tool ON tool_history(tool_id, created_ts DESC)"
     )
+    # 收敛历史遗留的「连续重复」记录（与 add_record 的去重规则一致，幂等）
+    rows = conn.execute(
+        "SELECT id, tool_id, action, summary, detail FROM tool_history"
+        " ORDER BY tool_id, created_ts DESC, id DESC"
+    ).fetchall()
+    dup_ids: List[int] = []
+    prev_key: Optional[tuple] = None
+    for rid, t_id, t_action, t_summary, t_detail in rows:
+        key = (t_id, t_action, t_summary, t_detail or "")
+        if key == prev_key:
+            dup_ids.append(rid)
+        else:
+            prev_key = key
+    if dup_ids:
+        conn.executemany("DELETE FROM tool_history WHERE id = ?", [(i,) for i in dup_ids])
     conn.commit()
     _conn = conn
     return conn
@@ -166,6 +181,22 @@ def add_record(params: Dict[str, Any]) -> Dict[str, Any]:
 
     with _lock:
         conn = _get_conn()
+        # 连续重复抑制：与该工具最新一条记录完全一致时，仅刷新时间不新增行，
+        # 避免同一段输入反复计算后历史里出现多条重合记录
+        last = conn.execute(
+            "SELECT id, action, summary, detail FROM tool_history"
+            " WHERE tool_id = ? ORDER BY created_ts DESC, id DESC LIMIT 1",
+            (tool_id,),
+        ).fetchone()
+        if last is not None and last[1] == action and last[2] == summary and (last[3] or "") == detail:
+            record_id = int(last[0])
+            conn.execute(
+                "UPDATE tool_history SET created_at = ?, created_ts = ? WHERE id = ?",
+                (now_at, now_ts, record_id),
+            )
+            conn.commit()
+            return {"id": record_id, "createdAt": now_at, "deduped": True}
+
         cur = conn.execute(
             "INSERT INTO tool_history (tool_id, tool_title, action, summary, detail, created_at, created_ts)"
             " VALUES (?, ?, ?, ?, ?, ?, ?)",

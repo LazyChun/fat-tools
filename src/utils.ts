@@ -5,6 +5,63 @@
  * 便于用 vitest 做单元测试，UI 组件只负责交互与展示。
  */
 
+import { pinyin } from "pinyin-pro";
+
+/* ------------------------------------------------------------------ */
+/* 拼音搜索匹配                                                         */
+/* ------------------------------------------------------------------ */
+
+interface PinyinKeys {
+  /** 全拼（仅小写字母数字，如 "haxijisuan"） */
+  full: string;
+  /** 首字母（如 "hxjs"） */
+  initials: string;
+}
+
+const pinyinKeysCache = new Map<string, PinyinKeys>();
+
+/** 生成文本的拼音检索键（全拼 + 首字母，带缓存；支持中英混排） */
+export function getPinyinKeys(text: string): PinyinKeys {
+  const cached = pinyinKeysCache.get(text);
+  if (cached) return cached;
+  const clean = (arr: string[]) =>
+    arr
+      .join("")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+  let keys: PinyinKeys;
+  try {
+    const full = clean(
+      pinyin(text, { toneType: "none", type: "array", nonZh: "consecutive" }),
+    );
+    const initials = clean(
+      pinyin(text, {
+        pattern: "first",
+        toneType: "none",
+        type: "array",
+        nonZh: "consecutive",
+      }),
+    );
+    keys = { full, initials };
+  } catch {
+    keys = { full: "", initials: "" };
+  }
+  pinyinKeysCache.set(text, keys);
+  return keys;
+}
+
+/**
+ * 拼音搜索匹配：query 可命中原文、全拼或拼音首字母。
+ * 例：文本「哈希计算」可被 "hash"、"哈希"、"haxi"、"hxjs" 命中。
+ */
+export function matchPinyin(text: string, query: string): boolean {
+  const q = query.trim().toLowerCase().replace(/\s+/g, "");
+  if (!q) return true;
+  if (text.toLowerCase().includes(q)) return true;
+  const keys = getPinyinKeys(text);
+  return keys.full.includes(q) || keys.initials.includes(q);
+}
+
 /* ------------------------------------------------------------------ */
 /* 通用字节工具                                                        */
 /* ------------------------------------------------------------------ */
@@ -50,10 +107,10 @@ export function md5(input: string | Uint8Array): string {
     K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) >>> 0;
   }
   const S = [
-    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
-    5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
-    4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
-    6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
+    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5,
+    9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11,
+    16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10,
+    15, 21,
   ];
 
   let a0 = 0x67452301;
@@ -105,17 +162,189 @@ export function md5(input: string | Uint8Array): string {
   return bytesToHex(out);
 }
 
+/** 增量 MD5 计算器（适合大文件流式处理） */
+export class Md5Context {
+  private a = 0x67452301;
+  private b = 0xefcdab89;
+  private c = 0x98badcfe;
+  private d = 0x10325476;
+  private buffer = new Uint8Array(0);
+  private totalBytes = 0;
+
+  private static readonly K = Md5Context.buildK();
+  private static readonly S = [
+    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5,
+    9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11,
+    16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10,
+    15, 21,
+  ];
+
+  private static buildK(): Uint32Array {
+    const K = new Uint32Array(64);
+    for (let i = 0; i < 64; i++) {
+      K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) >>> 0;
+    }
+    return K;
+  }
+
+  private static leftRotate(x: number, c: number): number {
+    return ((x << c) | (x >>> (32 - c))) >>> 0;
+  }
+
+  private processBlock(block: Uint8Array, offset: number): void {
+    const M = new Uint32Array(16);
+    for (let i = 0; i < 16; i++) {
+      M[i] =
+        (block[offset + i * 4] |
+          (block[offset + i * 4 + 1] << 8) |
+          (block[offset + i * 4 + 2] << 16) |
+          (block[offset + i * 4 + 3] << 24)) >>>
+        0;
+    }
+    let A = this.a;
+    let B = this.b;
+    let C = this.c;
+    let D = this.d;
+    for (let i = 0; i < 64; i++) {
+      let F: number;
+      let g: number;
+      if (i < 16) {
+        F = (B & C) | (~B & D);
+        g = i;
+      } else if (i < 32) {
+        F = (D & B) | (~D & C);
+        g = (5 * i + 1) % 16;
+      } else if (i < 48) {
+        F = B ^ C ^ D;
+        g = (3 * i + 5) % 16;
+      } else {
+        F = C ^ (B | ~D);
+        g = (7 * i) % 16;
+      }
+      F = (F + A + Md5Context.K[i] + M[g]) >>> 0;
+      A = D;
+      D = C;
+      C = B;
+      B = (B + Md5Context.leftRotate(F, Md5Context.S[i])) >>> 0;
+    }
+    this.a = (this.a + A) >>> 0;
+    this.b = (this.b + B) >>> 0;
+    this.c = (this.c + C) >>> 0;
+    this.d = (this.d + D) >>> 0;
+  }
+
+  update(chunk: Uint8Array): void {
+    this.totalBytes += chunk.length;
+    const merged = new Uint8Array(this.buffer.length + chunk.length);
+    merged.set(this.buffer, 0);
+    merged.set(chunk, this.buffer.length);
+    let off = 0;
+    while (merged.length - off >= 64) {
+      this.processBlock(merged, off);
+      off += 64;
+    }
+    this.buffer = merged.slice(off);
+  }
+
+  digest(): string {
+    const bitLen = this.totalBytes * 8;
+    const rem = this.buffer.length;
+    const padLen = rem < 56 ? 56 - rem : 120 - rem;
+    const tail = new Uint8Array(rem + padLen + 8);
+    tail.set(this.buffer, 0);
+    tail[rem] = 0x80;
+    const dv = new DataView(tail.buffer);
+    dv.setUint32(tail.length - 8, bitLen >>> 0, true);
+    dv.setUint32(tail.length - 4, Math.floor(bitLen / 0x100000000), true);
+    for (let off = 0; off < tail.length; off += 64)
+      this.processBlock(tail, off);
+    const out = new Uint8Array(16);
+    const odv = new DataView(out.buffer);
+    odv.setUint32(0, this.a, true);
+    odv.setUint32(4, this.b, true);
+    odv.setUint32(8, this.c, true);
+    odv.setUint32(12, this.d, true);
+    return bytesToHex(out);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* SHA 系列（WebCrypto，异步）                                          */
 /* ------------------------------------------------------------------ */
 
 export type ShaAlgorithm = "SHA-1" | "SHA-256" | "SHA-384" | "SHA-512";
 
-export async function shaHash(algorithm: ShaAlgorithm, input: string): Promise<string> {
+export async function shaHash(
+  algorithm: ShaAlgorithm,
+  input: string,
+): Promise<string> {
   const data = toUtf8Bytes(input) as unknown as BufferSource;
   const digest = await crypto.subtle.digest(algorithm, data);
   return bytesToHex(new Uint8Array(digest));
 }
+
+/** 对原始字节计算 SHA（用于文件等二进制数据） */
+export async function shaHashBytes(
+  algorithm: ShaAlgorithm,
+  data: ArrayBuffer | Uint8Array,
+): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    algorithm,
+    data as unknown as BufferSource,
+  );
+  return bytesToHex(new Uint8Array(digest));
+}
+
+export interface FileHashResult {
+  name: string;
+  md5: string;
+  shas: Record<string, string>;
+  size: number;
+}
+
+const FILE_CHUNK_SIZE = 4 * 1024 * 1024;
+const FILE_SHA_ALGOS: ShaAlgorithm[] = [
+  "SHA-1",
+  "SHA-256",
+  "SHA-384",
+  "SHA-512",
+];
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(2)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(2)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+/** 计算本地文件的 MD5 + SHA 系列哈希（纯本地，不上传） */
+export async function hashFile(
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<FileHashResult> {
+  const whole = new Uint8Array(await file.arrayBuffer());
+  const md5Ctx = new Md5Context();
+  const chunkCount = Math.max(1, Math.ceil(whole.byteLength / FILE_CHUNK_SIZE));
+  for (let i = 0; i < chunkCount; i++) {
+    const start = i * FILE_CHUNK_SIZE;
+    md5Ctx.update(whole.slice(start, start + FILE_CHUNK_SIZE));
+    if (onProgress) onProgress(Math.round(((i + 1) / chunkCount) * 100));
+    // 让出主线程，避免大文件阻塞 UI
+    if (i < chunkCount - 1) await new Promise((r) => setTimeout(r, 0));
+  }
+  const md5Hex = md5Ctx.digest();
+  const shas: Record<string, string> = {};
+  for (const a of FILE_SHA_ALGOS) {
+    try {
+      shas[a] = await shaHashBytes(a, whole);
+    } catch {
+      shas[a] = "";
+    }
+  }
+  return { name: file.name, md5: md5Hex, shas, size: file.size };
+}
+
+export { formatFileSize };
 
 /* ------------------------------------------------------------------ */
 /* 表达式计算器（递归下降解析，无 eval）                                 */
@@ -140,30 +369,36 @@ const CONSTANTS: Record<string, number> = {
 };
 
 function normalizeAngle(x: number, opt: CalcOptions, toRad: boolean): number {
-  return opt.angleMode === "deg" ? (toRad ? (x * Math.PI) / 180 : (x * 180) / Math.PI) : x;
+  return opt.angleMode === "deg"
+    ? toRad
+      ? (x * Math.PI) / 180
+      : (x * 180) / Math.PI
+    : x;
 }
 
-const FUNCTIONS: Record<string, (args: number[], opt: CalcOptions) => number> = {
-  sqrt: (a) => Math.sqrt(a[0]),
-  cbrt: (a) => Math.cbrt(a[0]),
-  abs: (a) => Math.abs(a[0]),
-  sin: (a, o) => Math.sin(normalizeAngle(a[0], o, true)),
-  cos: (a, o) => Math.cos(normalizeAngle(a[0], o, true)),
-  tan: (a, o) => Math.tan(normalizeAngle(a[0], o, true)),
-  asin: (a, o) => normalizeAngle(Math.asin(a[0]), o, false),
-  acos: (a, o) => normalizeAngle(Math.acos(a[0]), o, false),
-  atan: (a, o) => normalizeAngle(Math.atan(a[0]), o, false),
-  ln: (a) => Math.log(a[0]),
-  log: (a) => (a.length > 1 ? Math.log(a[1]) / Math.log(a[0]) : Math.log10(a[0])),
-  log2: (a) => Math.log2(a[0]),
-  exp: (a) => Math.exp(a[0]),
-  round: (a) => Math.round(a[0]),
-  floor: (a) => Math.floor(a[0]),
-  ceil: (a) => Math.ceil(a[0]),
-  min: (a) => Math.min(...a),
-  max: (a) => Math.max(...a),
-  pow: (a) => Math.pow(a[0], a[1]),
-};
+const FUNCTIONS: Record<string, (args: number[], opt: CalcOptions) => number> =
+  {
+    sqrt: (a) => Math.sqrt(a[0]),
+    cbrt: (a) => Math.cbrt(a[0]),
+    abs: (a) => Math.abs(a[0]),
+    sin: (a, o) => Math.sin(normalizeAngle(a[0], o, true)),
+    cos: (a, o) => Math.cos(normalizeAngle(a[0], o, true)),
+    tan: (a, o) => Math.tan(normalizeAngle(a[0], o, true)),
+    asin: (a, o) => normalizeAngle(Math.asin(a[0]), o, false),
+    acos: (a, o) => normalizeAngle(Math.acos(a[0]), o, false),
+    atan: (a, o) => normalizeAngle(Math.atan(a[0]), o, false),
+    ln: (a) => Math.log(a[0]),
+    log: (a) =>
+      a.length > 1 ? Math.log(a[1]) / Math.log(a[0]) : Math.log10(a[0]),
+    log2: (a) => Math.log2(a[0]),
+    exp: (a) => Math.exp(a[0]),
+    round: (a) => Math.round(a[0]),
+    floor: (a) => Math.floor(a[0]),
+    ceil: (a) => Math.ceil(a[0]),
+    min: (a) => Math.min(...a),
+    max: (a) => Math.max(...a),
+    pow: (a) => Math.pow(a[0], a[1]),
+  };
 
 function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
@@ -176,7 +411,9 @@ function tokenize(input: string): Token[] {
     }
     if (/[0-9.]/.test(ch)) {
       const rest = input.slice(i);
-      const m = rest.match(/^(\d+(\.\d+)?([eE][+-]?\d+)?|\.\d+([eE][+-]?\d+)?)/);
+      const m = rest.match(
+        /^(\d+(\.\d+)?([eE][+-]?\d+)?|\.\d+([eE][+-]?\d+)?)/,
+      );
       if (!m) throw new Error(`无法识别的数字（位置 ${i + 1}）`);
       const value = Number(m[0]);
       if (!Number.isFinite(value)) throw new Error(`非法数字「${m[0]}」`);
@@ -215,8 +452,15 @@ function tokenize(input: string): Token[] {
   return tokens;
 }
 
-export function evaluateExpression(input: string, options: CalcOptions = {}): number {
-  const cleaned = input.replace(/^\s*=\s*/, "").replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-");
+export function evaluateExpression(
+  input: string,
+  options: CalcOptions = {},
+): number {
+  const cleaned = input
+    .replace(/^\s*=\s*/, "")
+    .replace(/×/g, "*")
+    .replace(/÷/g, "/")
+    .replace(/−/g, "-");
   const tokens = tokenize(cleaned);
   let pos = 0;
 
@@ -250,8 +494,14 @@ export function evaluateExpression(input: string, options: CalcOptions = {}): nu
       if (t && t.type === "op" && ["*", "/", "%"].includes(t.value)) {
         next();
         const right = parseUnary();
-        if ((t.value === "/" || t.value === "%") && right === 0) throw new Error("除数不能为 0");
-        left = t.value === "*" ? left * right : t.value === "/" ? left / right : left % right;
+        if ((t.value === "/" || t.value === "%") && right === 0)
+          throw new Error("除数不能为 0");
+        left =
+          t.value === "*"
+            ? left * right
+            : t.value === "/"
+              ? left / right
+              : left % right;
       } else if (startsValue(t)) {
         // 隐式乘法：2pi、2(3+4)、(1+2)(3+4)
         const right = parseUnary();
@@ -407,7 +657,11 @@ export function diffToRows(ops: DiffLine[]): DiffRow[] {
   while (k < ops.length) {
     const op = ops[k];
     if (op.type === "same") {
-      rows.push({ type: "same", left: { no: op.aNo!, text: op.text }, right: { no: op.bNo!, text: op.text } });
+      rows.push({
+        type: "same",
+        left: { no: op.aNo!, text: op.text },
+        right: { no: op.bNo!, text: op.text },
+      });
       k++;
       continue;
     }
@@ -421,7 +675,11 @@ export function diffToRows(ops: DiffLine[]): DiffRow[] {
         const d = dels[r];
         const a = adds[r];
         if (d && a) {
-          rows.push({ type: "change", left: { no: d.aNo!, text: d.text }, right: { no: a.bNo!, text: a.text } });
+          rows.push({
+            type: "change",
+            left: { no: d.aNo!, text: d.text },
+            right: { no: a.bNo!, text: a.text },
+          });
         } else if (d) {
           rows.push({ type: "del", left: { no: d.aNo!, text: d.text } });
         } else if (a) {
@@ -462,7 +720,9 @@ export function countTextStats(text: string): TextStats {
   const latinWords = latinMatches ? latinMatches.length : 0;
   const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   const lines = normalized === "" ? 0 : normalized.split("\n").length;
-  const nonEmptyLines = normalized.split("\n").filter((l) => l.trim() !== "").length;
+  const nonEmptyLines = normalized
+    .split("\n")
+    .filter((l) => l.trim() !== "").length;
   const paragraphs = normalized
     .split(/\n{2,}/)
     .map((p) => p.trim())
@@ -522,18 +782,23 @@ export function uuidV4(): string {
 /* ------------------------------------------------------------------ */
 
 export function convertRadix(value: string, from: number, to: number): string {
-  const trimmed = value.trim().toLowerCase().replace(/^0[xbo]/, "");
+  const trimmed = value
+    .trim()
+    .toLowerCase()
+    .replace(/^0[xbo]/, "");
   if (trimmed === "") return "";
   const sign = trimmed.startsWith("-") ? -1 : 1;
   const digits = sign === -1 ? trimmed.slice(1) : trimmed;
-  const pattern = from <= 10
-    ? new RegExp(`^[0-${from - 1}]+$`)
-    : new RegExp(`^[0-9a-${String.fromCharCode(97 + from - 11)}]+$`);
+  const pattern =
+    from <= 10
+      ? new RegExp(`^[0-${from - 1}]+$`)
+      : new RegExp(`^[0-9a-${String.fromCharCode(97 + from - 11)}]+$`);
   if (!pattern.test(digits)) {
     throw new Error(`「${digits}」不是有效的 ${from} 进制整数`);
   }
   const num = parseInt(digits, from);
-  if (!Number.isSafeInteger(num)) throw new Error("数值超出安全整数范围（2^53-1）");
+  if (!Number.isSafeInteger(num))
+    throw new Error("数值超出安全整数范围（2^53-1）");
   return (sign === -1 ? "-" : "") + num.toString(to);
 }
 
@@ -554,9 +819,14 @@ export interface Hsl {
 
 export function parseHexColor(hex: string): Rgb {
   let h = hex.trim().replace(/^#/, "");
-  if (/^[0-9a-fA-F]{3}$/.test(h)) h = h.split("").map((c) => c + c).join("");
+  if (/^[0-9a-fA-F]{3}$/.test(h))
+    h = h
+      .split("")
+      .map((c) => c + c)
+      .join("");
   else if (/^[0-9a-fA-F]{8}$/.test(h)) h = h.slice(0, 6);
-  if (!/^[0-9a-fA-F]{6}$/.test(h)) throw new Error("无效的 HEX 颜色，示例：#1E90FF 或 1e90ff");
+  if (!/^[0-9a-fA-F]{6}$/.test(h))
+    throw new Error("无效的 HEX 颜色，示例：#1E90FF 或 1e90ff");
   const num = parseInt(h, 16);
   return { r: (num >> 16) & 0xff, g: (num >> 8) & 0xff, b: num & 0xff };
 }
@@ -588,7 +858,11 @@ export function rgbToHsl({ r, g, b }: Rgb): Hsl {
     else if (max === gn) h = ((bn - rn) / d + 2) / 6;
     else h = ((rn - gn) / d + 4) / 6;
   }
-  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+  return {
+    h: Math.round(h * 360),
+    s: Math.round(s * 100),
+    l: Math.round(l * 100),
+  };
 }
 
 export function hslToRgb({ h, s, l }: Hsl): Rgb {
@@ -596,7 +870,8 @@ export function hslToRgb({ h, s, l }: Hsl): Rgb {
   const ln = l / 100;
   const k = (n: number) => (n + h / 30) % 12;
   const a = sn * Math.min(ln, 1 - ln);
-  const f = (n: number) => ln - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const f = (n: number) =>
+    ln - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
   return {
     r: Math.round(f(0) * 255),
     g: Math.round(f(8) * 255),
@@ -627,7 +902,9 @@ export function splitWords(input: string): string[] {
   const withBoundaries = input
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
-  return withBoundaries.split(/[^A-Za-z0-9\u4e00-\u9fff]+/).filter((w) => w.length > 0);
+  return withBoundaries
+    .split(/[^A-Za-z0-9\u4e00-\u9fff]+/)
+    .filter((w) => w.length > 0);
 }
 
 function capitalizeWord(w: string): string {
@@ -640,7 +917,9 @@ export function convertNaming(input: string, style: NamingStyle): string {
   if (words.length === 0) return "";
   switch (style) {
     case "camel":
-      return words[0].toLowerCase() + words.slice(1).map(capitalizeWord).join("");
+      return (
+        words[0].toLowerCase() + words.slice(1).map(capitalizeWord).join("")
+      );
     case "pascal":
       return words.map(capitalizeWord).join("");
     case "snake":
@@ -788,7 +1067,9 @@ export function processLines(text: string, opt: LinesOptions): string {
   if (opt.reverse) lines = [...lines].reverse();
 
   if (opt.number) {
-    const width = String(opt.numberStart + Math.max(0, lines.length - 1)).length;
+    const width = String(
+      opt.numberStart + Math.max(0, lines.length - 1),
+    ).length;
     lines = lines.map(
       (l, i) => `${String(opt.numberStart + i).padStart(width, "0")}. ${l}`,
     );
@@ -918,7 +1199,11 @@ export const UNIT_CATEGORIES: UnitCategory[] = [
   },
 ];
 
-function convertTemperature(fromId: string, toId: string, value: number): number {
+function convertTemperature(
+  fromId: string,
+  toId: string,
+  value: number,
+): number {
   let c: number;
   if (fromId === "c") c = value;
   else if (fromId === "f") c = ((value - 32) * 5) / 9;
@@ -970,7 +1255,10 @@ const AMBIGUOUS_CHARS = "Il1O0oB8S5Z2";
 /** 加密安全的 [0, maxExclusive) 随机整数（带拒绝采样避免取模偏置） */
 export function secureRandomInt(maxExclusive: number): number {
   if (maxExclusive <= 0) return 0;
-  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.getRandomValues === "function"
+  ) {
     const limit = Math.floor(0x100000000 / maxExclusive) * maxExclusive;
     const buf = new Uint32Array(1);
     let v = 0;
@@ -1131,7 +1419,10 @@ function renderInline(src: string): string {
   out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
   out = out.replace(/(^|[^_])_([^_\n]+)_/g, "$1<em>$2</em>");
   out = out.replace(/~~([^~]+)~~/g, "<del>$1</del>");
-  out = out.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => `<code>${escapeHtml(codes[Number(i)])}</code>`);
+  out = out.replace(
+    /\u0000(\d+)\u0000/g,
+    (_m, i: string) => `<code>${escapeHtml(codes[Number(i)])}</code>`,
+  );
   return out;
 }
 
@@ -1191,7 +1482,9 @@ export function renderMarkdown(md: string): string {
         buf.push(lines[i].replace(/^>\s?/, ""));
         i++;
       }
-      html.push(`<blockquote>${renderInline(buf.join("\n")).replace(/\n/g, "<br/>")}</blockquote>`);
+      html.push(
+        `<blockquote>${renderInline(buf.join("\n")).replace(/\n/g, "<br/>")}</blockquote>`,
+      );
       continue;
     }
 
@@ -1219,7 +1512,11 @@ export function renderMarkdown(md: string): string {
     closeLists();
     const buf = [line];
     i++;
-    while (i < lines.length && lines[i].trim() !== "" && !isBlockStart(lines[i])) {
+    while (
+      i < lines.length &&
+      lines[i].trim() !== "" &&
+      !isBlockStart(lines[i])
+    ) {
       buf.push(lines[i]);
       i++;
     }
@@ -1313,7 +1610,9 @@ export function textToMorse(text: string): string {
         .split(/\s+/)
         .filter((w) => w !== "")
         .map((word) =>
-          [...word].map((ch) => MORSE_TABLE[ch.toUpperCase()] ?? MORSE_UNKNOWN).join(" "),
+          [...word]
+            .map((ch) => MORSE_TABLE[ch.toUpperCase()] ?? MORSE_UNKNOWN)
+            .join(" "),
         )
         .join(" / "),
     )
@@ -1412,7 +1711,8 @@ export function calendarDiff(from: Date, to: Date): CalendarDiff {
 
   // 先按月逼近：取最大的 m，使 start + m 个月 ≤ end（月末夹取，故可能回退一步）
   let months =
-    (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+    (end.getFullYear() - start.getFullYear()) * 12 +
+    (end.getMonth() - start.getMonth());
   if (months < 0) months = 0;
   let anchor = addToDate(start, months, "month");
   while (months > 0 && anchor.getTime() > end.getTime()) {
@@ -1420,7 +1720,10 @@ export function calendarDiff(from: Date, to: Date): CalendarDiff {
     anchor = addToDate(start, months, "month");
   }
   // 剩余不足一个月的部分按整天计
-  const days = Math.max(0, Math.floor((end.getTime() - anchor.getTime()) / MS_PER_DAY));
+  const days = Math.max(
+    0,
+    Math.floor((end.getTime() - anchor.getTime()) / MS_PER_DAY),
+  );
   return { years: Math.floor(months / 12), months: months % 12, days, sign };
 }
 
@@ -1600,4 +1903,228 @@ export function formatDate(d: Date): string {
 /** 星期文案 */
 export function weekdayLabel(d: Date): string {
   return `星期${"日一二三四五六"[d.getDay()]}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* 条形码（Code 128）                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Code 128 编码表（CODE128 code-set B，值 0..106）。
+ * 索引 = Code128 值；每一项是 6 位「条空」模块宽度串（以条开头）。
+ * 起点符 B = 104，校验位 = (104 + Σ(i * value_i)) % 103，终点符 106。
+ */
+const CODE128_PATTERNS: string[] = [
+  "11011001100",
+  "11001101100",
+  "11001100110",
+  "10010011000",
+  "10010001100",
+  "10001001100",
+  "10011001000",
+  "10011000100",
+  "10001100100",
+  "11001001000",
+  "11001000100",
+  "11000100100",
+  "10110011100",
+  "10011011100",
+  "10011001110",
+  "10111001100",
+  "10011101100",
+  "10011100110",
+  "11001110010",
+  "11001011100",
+  "11001001110",
+  "11011100100",
+  "11001110100",
+  "11101101110",
+  "11101001100",
+  "11100101100",
+  "11100100110",
+  "11101100100",
+  "11100110100",
+  "11100110010",
+  "11011011000",
+  "11011000110",
+  "11000110110",
+  "10100011000",
+  "10001011000",
+  "10001000110",
+  "10110001000",
+  "10001101000",
+  "10001100010",
+  "11010001000",
+  "11000101000",
+  "11000100010",
+  "10110111000",
+  "10110001110",
+  "10001101110",
+  "10111011000",
+  "10111000110",
+  "10001110110",
+  "11101110110",
+  "11010001110",
+  "11000101110",
+  "11011101000",
+  "11011100010",
+  "11011101110",
+  "11101011000",
+  "11101000110",
+  "11100010110",
+  "11101101000",
+  "11101100010",
+  "11100011010",
+  "11101111010",
+  "11001000010",
+  "11110001010",
+  "10100110000",
+  "10100001100",
+  "10010110000",
+  "10010000110",
+  "10000101100",
+  "10000100110",
+  "10110010000",
+  "10110000100",
+  "10011010000",
+  "10011000010",
+  "10000110100",
+  "10000110010",
+  "11000010010",
+  "11001010000",
+  "11110111010",
+  "11000010100",
+  "10001111010",
+  "10100111100",
+  "10010111100",
+  "10010011110",
+  "10111100100",
+  "10011110100",
+  "10011110010",
+  "11110100100",
+  "11110010100",
+  "11110010010",
+  "11011011110",
+  "11011110110",
+  "11110110110",
+  "10101111000",
+  "10100011110",
+  "10001011110",
+  "10111101000",
+  "10111100010",
+  "11110101000",
+  "11110100010",
+  "10111011110",
+  "10111101110",
+  "11101011110",
+  "11110101110",
+  "11010000100",
+  "11010010000",
+  "11010011100",
+  "1100011101011",
+];
+
+export interface BarcodeResult {
+  /** 条空模块宽度序列（以条开始，交替条/空） */
+  modules: string;
+  /** 二进制位串，可直接绘制 */
+  bits: string;
+  /** 编码后的值序列（含起止符与校验位） */
+  codes: number[];
+  /** 是否是可被 Code128 编码的字符 */
+  valid: boolean;
+}
+
+/** 字符串 → Code128（code-set B）编码结果 */
+export function encodeCode128(text: string): BarcodeResult {
+  const codes: number[] = [104]; // Start B
+  for (const ch of text) {
+    const code = ch.charCodeAt(0);
+    if (code < 32 || code > 126) {
+      return { modules: "", bits: "", codes: [], valid: false };
+    }
+    codes.push(code - 32);
+  }
+  let checksum = 0;
+  for (let i = 0; i < codes.length; i++)
+    checksum += codes[i] * (i === 0 ? 1 : i);
+  codes.push(checksum % 103);
+  codes.push(106); // Stop
+
+  let bits = "";
+  for (const c of codes) bits += CODE128_PATTERNS[c];
+  return { modules: bits, bits, codes, valid: true };
+}
+
+/* ------------------------------------------------------------------ */
+/* 随机字符串生成                                                       */
+/* ------------------------------------------------------------------ */
+
+/** 随机字符串用常用汉字字符集（CJK 统一表意文字前 1000 个，覆盖大量常用字） */
+export const CJK_CHARS = Array.from({ length: 1000 }, (_, i) =>
+  String.fromCodePoint(0x4e00 + i),
+).join("");
+
+export const RANDOM_CHARSETS = {
+  digits: "0123456789",
+  lower: "abcdefghijklmnopqrstuvwxyz",
+  upper: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  symbols: "!@#$%^&*()-_=+[]{};:,.?/",
+  cjk: CJK_CHARS,
+} as const;
+
+export type RandomCharClass = keyof typeof RANDOM_CHARSETS;
+
+export interface RandomStringOptions {
+  length: number;
+  classes: RandomCharClass[];
+  excludeSimilar: boolean;
+  custom: string;
+  prefix: string;
+  suffix: string;
+}
+
+const SIMILAR_CHARS = "Il1O0oiB8S5Z2";
+
+/** 从字符集生成随机字符串（加密安全；去重时保证不重复） */
+export function generateRandomString(
+  opt: RandomStringOptions,
+  randomInt: (n: number) => number = secureRandomInt,
+): string {
+  let pool =
+    opt.classes.map((c) => RANDOM_CHARSETS[c] ?? "").join("") + opt.custom;
+  pool = [...new Set(pool)].join("");
+  if (opt.excludeSimilar)
+    pool = [...pool].filter((c) => !SIMILAR_CHARS.includes(c)).join("");
+  if (!pool) throw new Error("可用字符集为空，请至少选择一种字符类型");
+  const length = Math.max(0, Math.min(4096, Math.floor(opt.length)));
+  let body = "";
+  for (let i = 0; i < length; i++) body += pool[randomInt(pool.length)];
+  return `${opt.prefix}${body}${opt.suffix}`;
+}
+
+/** 批量生成随机字符串（unique=true 时确保互不相同，上限为字符集组合数） */
+export function generateRandomStrings(
+  opt: RandomStringOptions,
+  count: number,
+  unique = false,
+  randomInt: (n: number) => number = secureRandomInt,
+): string[] {
+  const n = Math.max(1, Math.min(1000, Math.floor(count)));
+  if (!unique)
+    return Array.from({ length: n }, () =>
+      generateRandomString(opt, randomInt),
+    );
+  const seen = new Set<string>();
+  const out: string[] = [];
+  let guard = n * 50 + 1000;
+  while (out.length < n && guard-- > 0) {
+    const s = generateRandomString(opt, randomInt);
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  if (out.length < n)
+    throw new Error("去重模式下可用组合不足，已生成 " + out.length + " 条");
+  return out;
 }

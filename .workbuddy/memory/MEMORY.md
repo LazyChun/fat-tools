@@ -21,6 +21,8 @@ FatNotes 定制插件「fat-tools」——开发者常用工具箱。Monorepo �
 - **构建会被 safe-delete shim 拦截**：webpack `output.clean` 逐文件 unlink 触发 `[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED]`（阈值 50，**按轮对话累计**，用满后同轮内所有 node 删除都失败，`rm -rf dist` 再 build 也无效）。解决：`CODEBUDDY_SAFE_DELETE_ENABLED=0 npm run build`（shim 官方开关，删的只是 dist 产物）。
 - 打包 zip 用 `python -c` + `zipfile`（PowerShell `Compress-Archive` 会被沙箱拦，bash 里通常没有 `zip`）。
 - 无 `onUnusedLocals`，但别留无用 import；任何 `copyable` 的 `StatRow` 必须传字符串/数字（内部是 `String(value)`，传 JSX 会变 `[object Object]`）。
+- **vitest 锁定 ^3**：vitest 4.1.11 在本机所有测试报 `Cannot read properties of undefined (reading 'config')`（重装无效，疑与 vite 8 组合 bug），已降级 vitest@3 解决，勿升级。
+- 工具搜索支持拼音匹配：`src/utils.ts` 的 `matchPinyin`（pinyin-pro，全拼+首字母），已接入 MenuView；注意「哈希」全拼是 haxi（希=xi）。
 
 ## 构建 / 验证
 

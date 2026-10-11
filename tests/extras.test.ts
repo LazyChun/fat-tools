@@ -3,13 +3,17 @@ import {
   convertNaming,
   convertUnit,
   decodeJwt,
+  encodeCode128,
   estimatePasswordBits,
   generatePassword,
+  generateRandomString,
+  generateRandomStrings,
   processLines,
   renderMarkdown,
   splitWords,
   DEFAULT_LINES_OPTIONS,
   type PasswordOptions,
+  type RandomStringOptions,
 } from "../src/utils";
 
 describe("splitWords / convertNaming", () => {
@@ -188,5 +192,72 @@ describe("renderMarkdown", () => {
 
   it("链接渲染", () => {
     expect(renderMarkdown("[x](https://a.com)")).toContain('href="https://a.com"');
+  });
+});
+
+describe("encodeCode128", () => {
+  it("每字符 11 模块，起止符与校验位正确", () => {
+    const r = encodeCode128("A");
+    // Start B(104) + 'A'(33) + 校验 + Stop(106)
+    expect(r.valid).toBe(true);
+    expect(r.codes).toHaveLength(4);
+    expect(r.codes[0]).toBe(104);
+    expect(r.codes[1]).toBe(33);
+    expect(r.codes[3]).toBe(106);
+    // 校验位 = (104*1 + 33*1) % 103 = 137 % 103 = 34
+    expect(r.codes[2]).toBe(34);
+    // 三个 11 模块字符 + 13 模块终止符
+    expect(r.bits).toHaveLength(11 * 3 + 13);
+    expect(r.bits.startsWith("11010010000")).toBe(true); // 起点符 B
+    expect(r.bits.endsWith("1100011101011")).toBe(true); // 终止符
+  });
+
+  it("多字符校验位按位置加权", () => {
+    const r = encodeCode128("AB");
+    expect(r.codes).toEqual([104, 33, 34, 205 % 103, 106]);
+    // 4 个 11 模块字符 + 13 模块终止符
+    expect(r.bits).toHaveLength(11 * 4 + 13);
+  });
+
+  it("不支持 ASCII 之外的字符时 valid=false", () => {
+    expect(encodeCode128("中文").valid).toBe(false);
+    expect(encodeCode128("").valid).toBe(true);
+  });
+});
+
+describe("generateRandomString", () => {
+  const base: RandomStringOptions = {
+    length: 12,
+    classes: ["lower", "upper", "digits"],
+    excludeSimilar: false,
+    custom: "",
+    prefix: "",
+    suffix: "",
+  };
+
+  it("长度与前缀后缀", () => {
+    expect(generateRandomString(base)).toHaveLength(12);
+    expect(generateRandomString({ ...base, prefix: "ID-", suffix: "!" })).toHaveLength(12 + 3 + 1);
+  });
+
+  it("只用选中的字符集", () => {
+    const s = generateRandomString({ ...base, classes: ["digits"], length: 20 });
+    expect(/^\d{20}$/.test(s)).toBe(true);
+  });
+
+  it("排除易混字符", () => {
+    const s = generateRandomString({ ...base, length: 200, excludeSimilar: true });
+    expect(/[Il1O0oiB8S5Z2]/.test(s)).toBe(false);
+  });
+
+  it("支持自定义字符与去重", () => {
+    const s = generateRandomString({ ...base, classes: [], custom: "XYZ", length: 30 });
+    expect(/^[XYZ]{30}$/.test(s)).toBe(true);
+    const list = generateRandomStrings({ ...base, length: 6 }, 50, true);
+    expect(new Set(list).size).toBe(50);
+  });
+
+  it("字符集为空时报错", () => {
+    expect(() => generateRandomString({ ...base, classes: [], custom: "" })).toThrow();
   });
 });
