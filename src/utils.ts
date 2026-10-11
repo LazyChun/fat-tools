@@ -603,3 +603,629 @@ export function hslToRgb({ h, s, l }: Hsl): Rgb {
     b: Math.round(f(4) * 255),
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* 命名风格转换                                                         */
+/* ------------------------------------------------------------------ */
+
+export type NamingStyle =
+  | "camel"
+  | "pascal"
+  | "snake"
+  | "kebab"
+  | "constant"
+  | "title"
+  | "sentence"
+  | "dot"
+  | "path"
+  | "upper"
+  | "lower";
+
+/** 把任意命名 / 句子拆成单词序列（支持 camelCase / snake_case / kebab-case / 空格） */
+export function splitWords(input: string): string[] {
+  if (!input) return [];
+  const withBoundaries = input
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+  return withBoundaries.split(/[^A-Za-z0-9\u4e00-\u9fff]+/).filter((w) => w.length > 0);
+}
+
+function capitalizeWord(w: string): string {
+  if (!w) return w;
+  return w[0].toUpperCase() + w.slice(1).toLowerCase();
+}
+
+export function convertNaming(input: string, style: NamingStyle): string {
+  const words = splitWords(input);
+  if (words.length === 0) return "";
+  switch (style) {
+    case "camel":
+      return words[0].toLowerCase() + words.slice(1).map(capitalizeWord).join("");
+    case "pascal":
+      return words.map(capitalizeWord).join("");
+    case "snake":
+      return words.map((w) => w.toLowerCase()).join("_");
+    case "kebab":
+      return words.map((w) => w.toLowerCase()).join("-");
+    case "constant":
+      return words.map((w) => w.toUpperCase()).join("_");
+    case "title":
+      return words.map(capitalizeWord).join(" ");
+    case "sentence":
+      return words
+        .map((w) => w.toLowerCase())
+        .join(" ")
+        .replace(/^[a-z]/, (c) => c.toUpperCase());
+    case "dot":
+      return words.map((w) => w.toLowerCase()).join(".");
+    case "path":
+      return words.map((w) => w.toLowerCase()).join("/");
+    case "upper":
+      return words.map((w) => w.toUpperCase()).join("");
+    case "lower":
+      return words.map((w) => w.toLowerCase()).join("");
+    default:
+      return input;
+  }
+}
+
+export const NAMING_STYLES: { style: NamingStyle; label: string }[] = [
+  { style: "camel", label: "camelCase" },
+  { style: "pascal", label: "PascalCase" },
+  { style: "snake", label: "snake_case" },
+  { style: "kebab", label: "kebab-case" },
+  { style: "constant", label: "CONSTANT_CASE" },
+  { style: "title", label: "Title Case" },
+  { style: "sentence", label: "Sentence case" },
+  { style: "dot", label: "dot.case" },
+  { style: "path", label: "path/case" },
+  { style: "upper", label: "UPPERCASE" },
+  { style: "lower", label: "lowercase" },
+];
+
+/* ------------------------------------------------------------------ */
+/* 行处理（排序 / 去重 / 过滤 …）                                       */
+/* ------------------------------------------------------------------ */
+
+export type LineSortMode =
+  | "none"
+  | "asc"
+  | "desc"
+  | "natural"
+  | "length-asc"
+  | "length-desc"
+  | "shuffle";
+
+export interface LinesOptions {
+  trim: boolean;
+  removeEmpty: boolean;
+  dedupe: boolean;
+  caseInsensitive: boolean;
+  sort: LineSortMode;
+  reverse: boolean;
+  number: boolean;
+  numberStart: number;
+  filter: string;
+  filterMode: "contains" | "not-contains";
+}
+
+export const DEFAULT_LINES_OPTIONS: LinesOptions = {
+  trim: false,
+  removeEmpty: false,
+  dedupe: false,
+  caseInsensitive: false,
+  sort: "none",
+  reverse: false,
+  number: false,
+  numberStart: 1,
+  filter: "",
+  filterMode: "contains",
+};
+
+function shuffleArray<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+export function processLines(text: string, opt: LinesOptions): string {
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  let lines = normalized === "" ? [] : normalized.split("\n");
+
+  if (opt.trim) lines = lines.map((l) => l.trim());
+
+  if (opt.filter !== "") {
+    const needle = opt.caseInsensitive ? opt.filter.toLowerCase() : opt.filter;
+    lines = lines.filter((l) => {
+      const hay = opt.caseInsensitive ? l.toLowerCase() : l;
+      const has = hay.includes(needle);
+      return opt.filterMode === "contains" ? has : !has;
+    });
+  }
+
+  if (opt.removeEmpty) lines = lines.filter((l) => l !== "");
+
+  if (opt.dedupe) {
+    const seen = new Set<string>();
+    lines = lines.filter((l) => {
+      const key = opt.caseInsensitive ? l.toLowerCase() : l;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  const collator = new Intl.Collator(undefined, {
+    numeric: opt.sort === "natural",
+    sensitivity: opt.caseInsensitive ? "base" : "variant",
+  });
+  switch (opt.sort) {
+    case "asc":
+      lines = [...lines].sort((a, b) => collator.compare(a, b));
+      break;
+    case "desc":
+      lines = [...lines].sort((a, b) => collator.compare(b, a));
+      break;
+    case "natural":
+      lines = [...lines].sort((a, b) => collator.compare(a, b));
+      break;
+    case "length-asc":
+      lines = [...lines].sort((a, b) => a.length - b.length);
+      break;
+    case "length-desc":
+      lines = [...lines].sort((a, b) => b.length - a.length);
+      break;
+    case "shuffle":
+      lines = shuffleArray(lines);
+      break;
+    default:
+      break;
+  }
+
+  if (opt.reverse) lines = [...lines].reverse();
+
+  if (opt.number) {
+    const width = String(opt.numberStart + Math.max(0, lines.length - 1)).length;
+    lines = lines.map(
+      (l, i) => `${String(opt.numberStart + i).padStart(width, "0")}. ${l}`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+/* ------------------------------------------------------------------ */
+/* 单位换算                                                            */
+/* ------------------------------------------------------------------ */
+
+export interface UnitDef {
+  id: string;
+  name: string;
+  /** 相对基准单位的倍率 */
+  factor: number;
+}
+
+export interface UnitCategory {
+  id: string;
+  name: string;
+  temperature?: boolean;
+  units: UnitDef[];
+}
+
+export const UNIT_CATEGORIES: UnitCategory[] = [
+  {
+    id: "length",
+    name: "长度",
+    units: [
+      { id: "mm", name: "毫米 mm", factor: 0.001 },
+      { id: "cm", name: "厘米 cm", factor: 0.01 },
+      { id: "m", name: "米 m", factor: 1 },
+      { id: "km", name: "千米 km", factor: 1000 },
+      { id: "in", name: "英寸 in", factor: 0.0254 },
+      { id: "ft", name: "英尺 ft", factor: 0.3048 },
+      { id: "yd", name: "码 yd", factor: 0.9144 },
+      { id: "mi", name: "英里 mi", factor: 1609.344 },
+      { id: "nmi", name: "海里 nmi", factor: 1852 },
+    ],
+  },
+  {
+    id: "area",
+    name: "面积",
+    units: [
+      { id: "mm2", name: "平方毫米 mm²", factor: 0.000001 },
+      { id: "cm2", name: "平方厘米 cm²", factor: 0.0001 },
+      { id: "m2", name: "平方米 m²", factor: 1 },
+      { id: "km2", name: "平方千米 km²", factor: 1000000 },
+      { id: "ha", name: "公顷 ha", factor: 10000 },
+      { id: "mu", name: "亩", factor: 2000 / 3 },
+      { id: "acre", name: "英亩 acre", factor: 4046.8564224 },
+      { id: "ft2", name: "平方英尺 ft²", factor: 0.09290304 },
+    ],
+  },
+  {
+    id: "mass",
+    name: "质量",
+    units: [
+      { id: "mg", name: "毫克 mg", factor: 0.000001 },
+      { id: "g", name: "克 g", factor: 0.001 },
+      { id: "kg", name: "千克 kg", factor: 1 },
+      { id: "t", name: "吨 t", factor: 1000 },
+      { id: "jin", name: "斤", factor: 0.5 },
+      { id: "liang", name: "两", factor: 0.05 },
+      { id: "lb", name: "磅 lb", factor: 0.45359237 },
+      { id: "oz", name: "盎司 oz", factor: 0.028349523125 },
+    ],
+  },
+  {
+    id: "volume",
+    name: "体积",
+    units: [
+      { id: "ml", name: "毫升 mL", factor: 0.001 },
+      { id: "l", name: "升 L", factor: 1 },
+      { id: "cm3", name: "立方厘米 cm³", factor: 0.001 },
+      { id: "m3", name: "立方米 m³", factor: 1000 },
+      { id: "gal", name: "加仑 US gal", factor: 3.785411784 },
+      { id: "qt", name: "夸脱 US qt", factor: 0.946352946 },
+      { id: "floz", name: "液量盎司 US fl oz", factor: 0.0295735295625 },
+    ],
+  },
+  {
+    id: "data",
+    name: "数据存储",
+    units: [
+      { id: "bit", name: "比特 bit", factor: 0.125 },
+      { id: "b", name: "字节 B", factor: 1 },
+      { id: "kb", name: "KB (1024B)", factor: 1024 },
+      { id: "mb", name: "MB", factor: 1024 ** 2 },
+      { id: "gb", name: "GB", factor: 1024 ** 3 },
+      { id: "tb", name: "TB", factor: 1024 ** 4 },
+    ],
+  },
+  {
+    id: "time",
+    name: "时间",
+    units: [
+      { id: "ms", name: "毫秒 ms", factor: 0.001 },
+      { id: "s", name: "秒 s", factor: 1 },
+      { id: "min", name: "分钟 min", factor: 60 },
+      { id: "h", name: "小时 h", factor: 3600 },
+      { id: "d", name: "天 d", factor: 86400 },
+      { id: "wk", name: "周 wk", factor: 604800 },
+    ],
+  },
+  {
+    id: "speed",
+    name: "速度",
+    units: [
+      { id: "mps", name: "米/秒 m/s", factor: 1 },
+      { id: "kmh", name: "千米/时 km/h", factor: 1000 / 3600 },
+      { id: "mph", name: "英里/时 mph", factor: 0.44704 },
+      { id: "knot", name: "节 kn", factor: 1852 / 3600 },
+    ],
+  },
+  {
+    id: "temperature",
+    name: "温度",
+    temperature: true,
+    units: [
+      { id: "c", name: "摄氏度 °C", factor: 1 },
+      { id: "f", name: "华氏度 °F", factor: 1 },
+      { id: "k", name: "开尔文 K", factor: 1 },
+    ],
+  },
+];
+
+function convertTemperature(fromId: string, toId: string, value: number): number {
+  let c: number;
+  if (fromId === "c") c = value;
+  else if (fromId === "f") c = ((value - 32) * 5) / 9;
+  else if (fromId === "k") c = value - 273.15;
+  else throw new Error(`未知温度单位：${fromId}`);
+  if (toId === "c") return c;
+  if (toId === "f") return (c * 9) / 5 + 32;
+  if (toId === "k") return c + 273.15;
+  throw new Error(`未知温度单位：${toId}`);
+}
+
+export function convertUnit(
+  categoryId: string,
+  fromId: string,
+  toId: string,
+  value: number,
+): number {
+  const cat = UNIT_CATEGORIES.find((c) => c.id === categoryId);
+  if (!cat) throw new Error(`未知单位类别：${categoryId}`);
+  if (cat.temperature) return convertTemperature(fromId, toId, value);
+  const from = cat.units.find((u) => u.id === fromId);
+  const to = cat.units.find((u) => u.id === toId);
+  if (!from || !to) throw new Error("未知单位");
+  return (value * from.factor) / to.factor;
+}
+
+/* ------------------------------------------------------------------ */
+/* 随机密码生成                                                        */
+/* ------------------------------------------------------------------ */
+
+export interface PasswordOptions {
+  length: number;
+  upper: boolean;
+  lower: boolean;
+  digits: boolean;
+  symbols: boolean;
+  excludeAmbiguous: boolean;
+}
+
+export const PASSWORD_CHARSETS = {
+  upper: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  lower: "abcdefghijklmnopqrstuvwxyz",
+  digits: "0123456789",
+  symbols: "!@#$%^&*()-_=+[]{};:,.?/~",
+};
+
+const AMBIGUOUS_CHARS = "Il1O0oB8S5Z2";
+
+/** 加密安全的 [0, maxExclusive) 随机整数（带拒绝采样避免取模偏置） */
+export function secureRandomInt(maxExclusive: number): number {
+  if (maxExclusive <= 0) return 0;
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const limit = Math.floor(0x100000000 / maxExclusive) * maxExclusive;
+    const buf = new Uint32Array(1);
+    let v = 0;
+    do {
+      crypto.getRandomValues(buf);
+      v = buf[0];
+    } while (v >= limit);
+    return v % maxExclusive;
+  }
+  return Math.floor(Math.random() * maxExclusive);
+}
+
+export function passwordCharsetSize(opt: PasswordOptions): number {
+  let size = 0;
+  if (opt.upper) size += PASSWORD_CHARSETS.upper.length;
+  if (opt.lower) size += PASSWORD_CHARSETS.lower.length;
+  if (opt.digits) size += PASSWORD_CHARSETS.digits.length;
+  if (opt.symbols) size += PASSWORD_CHARSETS.symbols.length;
+  if (opt.excludeAmbiguous) {
+    for (const ch of AMBIGUOUS_CHARS) {
+      if (
+        (opt.upper && PASSWORD_CHARSETS.upper.includes(ch)) ||
+        (opt.lower && PASSWORD_CHARSETS.lower.includes(ch)) ||
+        (opt.digits && PASSWORD_CHARSETS.digits.includes(ch)) ||
+        (opt.symbols && PASSWORD_CHARSETS.symbols.includes(ch))
+      ) {
+        size -= 1;
+      }
+    }
+  }
+  return Math.max(0, size);
+}
+
+export function generatePassword(
+  opt: PasswordOptions,
+  randomInt: (n: number) => number = secureRandomInt,
+): string {
+  let pools: string[] = [];
+  if (opt.upper) pools.push(PASSWORD_CHARSETS.upper);
+  if (opt.lower) pools.push(PASSWORD_CHARSETS.lower);
+  if (opt.digits) pools.push(PASSWORD_CHARSETS.digits);
+  if (opt.symbols) pools.push(PASSWORD_CHARSETS.symbols);
+  if (opt.excludeAmbiguous) {
+    pools = pools.map((p) =>
+      [...p].filter((c) => !AMBIGUOUS_CHARS.includes(c)).join(""),
+    );
+  }
+  pools = pools.filter((p) => p.length > 0);
+  if (pools.length === 0) throw new Error("至少选择一种字符类型");
+
+  const length = Math.max(1, Math.min(256, Math.floor(opt.length)));
+  const all = pools.join("");
+  const chars: string[] = [];
+  // 保证每类至少出现一个字符
+  for (const p of pools) {
+    if (chars.length >= length) break;
+    chars.push(p[randomInt(p.length)]);
+  }
+  while (chars.length < length) chars.push(all[randomInt(all.length)]);
+  // Fisher-Yates 洗牌
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
+}
+
+/** 估算密码熵（比特） */
+export function estimatePasswordBits(opt: PasswordOptions): number {
+  const size = passwordCharsetSize(opt);
+  if (size <= 1) return 0;
+  return Math.round(opt.length * Math.log2(size));
+}
+
+export function passwordStrengthLabel(bits: number): {
+  label: string;
+  color: string;
+  percent: number;
+} {
+  const percent = Math.max(4, Math.min(100, Math.round((bits / 128) * 100)));
+  if (bits < 40) return { label: "弱", color: "#cf1322", percent };
+  if (bits < 60) return { label: "一般", color: "#d48806", percent };
+  if (bits < 90) return { label: "强", color: "#389e0d", percent };
+  return { label: "极强", color: "#08979c", percent };
+}
+
+/* ------------------------------------------------------------------ */
+/* JWT 解码                                                            */
+/* ------------------------------------------------------------------ */
+
+function base64UrlDecode(input: string): string {
+  let s = input.replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "");
+  while (s.length % 4 !== 0) s += "=";
+  const bin = atob(s);
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+export interface DecodedJwt {
+  header: Record<string, unknown>;
+  payload: Record<string, unknown>;
+  signature: string;
+}
+
+/** JWT 中常见的时间戳声明（秒级 Unix 时间） */
+export const JWT_TIME_CLAIMS = ["exp", "iat", "nbf", "auth_time", "updated_at"];
+
+export function decodeJwt(token: string): DecodedJwt {
+  const parts = token.trim().split(".");
+  if (parts.length < 2) {
+    throw new Error("不是有效的 JWT（应形如 header.payload.signature）");
+  }
+  let header: Record<string, unknown>;
+  let payload: Record<string, unknown>;
+  try {
+    header = JSON.parse(base64UrlDecode(parts[0])) as Record<string, unknown>;
+  } catch {
+    throw new Error("JWT header 解析失败（Base64URL 或 JSON 非法）");
+  }
+  try {
+    payload = JSON.parse(base64UrlDecode(parts[1])) as Record<string, unknown>;
+  } catch {
+    throw new Error("JWT payload 解析失败（Base64URL 或 JSON 非法）");
+  }
+  return { header, payload, signature: parts[2] || "" };
+}
+
+/* ------------------------------------------------------------------ */
+/* 轻量 Markdown 渲染（自研，输出 HTML 字符串）                          */
+/* ------------------------------------------------------------------ */
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderInline(src: string): string {
+  const codes: string[] = [];
+  let out = src.replace(/`([^`]+)`/g, (_m, p1: string) => {
+    codes.push(p1);
+    return `\u0000${codes.length - 1}\u0000`;
+  });
+  out = escapeHtml(out);
+  out = out.replace(
+    /!\[([^\]]*)\]\(([^)\s]+)\)/g,
+    (_m, alt: string, url: string) => `<img alt="${alt}" src="${url}" />`,
+  );
+  out = out.replace(
+    /\[([^\]]+)\]\(([^)\s]+)\)/g,
+    (_m, text: string, url: string) =>
+      `<a href="${url}" target="_blank" rel="noreferrer">${text}</a>`,
+  );
+  out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  out = out.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+  out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  out = out.replace(/(^|[^_])_([^_\n]+)_/g, "$1<em>$2</em>");
+  out = out.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+  out = out.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => `<code>${escapeHtml(codes[Number(i)])}</code>`);
+  return out;
+}
+
+/** 极简 Markdown → HTML：标题 / 粗斜体 / 行内代码 / 代码块 / 列表 / 引用 / 链接 / 图片 / 分割线 */
+export function renderMarkdown(md: string): string {
+  const lines = md.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const html: string[] = [];
+  const listStack: ("ul" | "ol")[] = [];
+  let i = 0;
+
+  const closeLists = () => {
+    while (listStack.length) html.push(`</${listStack.pop()}>`);
+  };
+
+  const isBlockStart = (l: string): boolean =>
+    /^(#{1,6}\s|```|>|\s*[-*+]\s|\s*\d+[.)]\s)/.test(l);
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const fence = line.match(/^```(\w*)\s*$/);
+    if (fence) {
+      closeLists();
+      const lang = fence[1];
+      i++;
+      const buf: string[] = [];
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) {
+        buf.push(lines[i]);
+        i++;
+      }
+      i++; // 跳过结束围栏
+      html.push(
+        `<pre><code data-lang="${escapeHtml(lang)}">${escapeHtml(buf.join("\n"))}</code></pre>`,
+      );
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      closeLists();
+      const level = heading[1].length;
+      html.push(`<h${level}>${renderInline(heading[2])}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    if (/^\s*([-*_])\s*(\1\s*){2,}$/.test(line)) {
+      closeLists();
+      html.push("<hr/>");
+      i++;
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {
+      closeLists();
+      const buf: string[] = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) {
+        buf.push(lines[i].replace(/^>\s?/, ""));
+        i++;
+      }
+      html.push(`<blockquote>${renderInline(buf.join("\n")).replace(/\n/g, "<br/>")}</blockquote>`);
+      continue;
+    }
+
+    const ul = line.match(/^\s*[-*+]\s+(.*)$/);
+    const ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (ul || ol) {
+      const type: "ul" | "ol" = ul ? "ul" : "ol";
+      const top = listStack[listStack.length - 1];
+      if (top !== type) {
+        if (top) html.push(`</${listStack.pop()}>`);
+        html.push(`<${type}>`);
+        listStack.push(type);
+      }
+      html.push(`<li>${renderInline(ul ? ul[1] : ol![1])}</li>`);
+      i++;
+      continue;
+    }
+
+    if (/^\s*$/.test(line)) {
+      closeLists();
+      i++;
+      continue;
+    }
+
+    closeLists();
+    const buf = [line];
+    i++;
+    while (i < lines.length && lines[i].trim() !== "" && !isBlockStart(lines[i])) {
+      buf.push(lines[i]);
+      i++;
+    }
+    html.push(`<p>${renderInline(buf.join("\n")).replace(/\n/g, "<br/>")}</p>`);
+  }
+
+  closeLists();
+  return html.join("\n");
+}

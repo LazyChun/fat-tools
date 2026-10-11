@@ -4,16 +4,26 @@
 import React from "react";
 import {
   BgColorsOutlined,
+  CheckSquareOutlined,
   CodeOutlined,
   CalculatorOutlined,
+  DashboardOutlined,
   ExportOutlined,
   DiffOutlined,
   FieldTimeOutlined,
+  FileMarkdownOutlined,
   FileSearchOutlined,
   FileTextOutlined,
+  FontColorsOutlined,
   FontSizeOutlined,
+  GlobalOutlined,
+  HighlightOutlined,
+  HourglassOutlined,
+  IdcardOutlined,
   KeyOutlined,
   LinkOutlined,
+  LockOutlined,
+  OrderedListOutlined,
   SafetyCertificateOutlined,
   SwapOutlined,
   ClockCircleOutlined,
@@ -31,8 +41,26 @@ import UuidTool from "./UuidTool";
 import RadixTool from "./RadixTool";
 import ColorTool from "./ColorTool";
 import HistoryTool from "./HistoryTool";
+import DrawTool from "./DrawTool";
+import PasswordTool from "./PasswordTool";
+import NamingTool from "./NamingTool";
+import LinesTool from "./LinesTool";
+import MarkdownTool from "./MarkdownTool";
+import UrlParseTool from "./UrlParseTool";
+import JwtTool from "./JwtTool";
+import UnitTool from "./UnitTool";
+import TimerTool from "./TimerTool";
+import TodoTool from "./TodoTool";
 
-export type ToolCategory = "文本" | "编码" | "开发" | "数值" | "记录";
+export type ToolCategory =
+  | "文本"
+  | "编码"
+  | "开发"
+  | "数值"
+  | "绘图"
+  | "生成"
+  | "时间"
+  | "记录";
 
 export interface ToolDef {
   id: string;
@@ -139,6 +167,86 @@ export const TOOLS: ToolDef[] = [
     icon: BgColorsOutlined,
     category: "编码",
     component: ColorTool,
+  },
+  {
+    id: "naming",
+    title: "命名转换",
+    desc: "camelCase / snake_case / kebab-case 等互转",
+    icon: FontColorsOutlined,
+    category: "文本",
+    component: NamingTool,
+  },
+  {
+    id: "lines",
+    title: "行处理",
+    desc: "多行文本去重 / 排序 / 去空行 / 过滤 / 加行号",
+    icon: OrderedListOutlined,
+    category: "文本",
+    component: LinesTool,
+  },
+  {
+    id: "markdown",
+    title: "Markdown 预览",
+    desc: "实时渲染 Markdown，可复制 HTML",
+    icon: FileMarkdownOutlined,
+    category: "文本",
+    component: MarkdownTool,
+  },
+  {
+    id: "url-parse",
+    title: "URL 解析",
+    desc: "拆解 URL 组成，查询参数表格式化",
+    icon: GlobalOutlined,
+    category: "开发",
+    component: UrlParseTool,
+  },
+  {
+    id: "jwt",
+    title: "JWT 解析",
+    desc: "解码 header / payload，校验过期时间",
+    icon: IdcardOutlined,
+    category: "开发",
+    component: JwtTool,
+  },
+  {
+    id: "unit",
+    title: "单位换算",
+    desc: "长度/面积/质量/体积/数据/时间/速度/温度",
+    icon: DashboardOutlined,
+    category: "数值",
+    component: UnitTool,
+  },
+  {
+    id: "draw",
+    title: "画板",
+    desc: "手绘画笔/形状，撤销重做，导出 PNG",
+    icon: HighlightOutlined,
+    category: "绘图",
+    component: DrawTool,
+  },
+  {
+    id: "password",
+    title: "密码生成器",
+    desc: "加密安全随机密码，含强度评估与批量生成",
+    icon: LockOutlined,
+    category: "生成",
+    component: PasswordTool,
+  },
+  {
+    id: "timer",
+    title: "秒表 / 倒计时",
+    desc: "计时、计次与倒计时提醒",
+    icon: HourglassOutlined,
+    category: "时间",
+    component: TimerTool,
+  },
+  {
+    id: "todo",
+    title: "待办清单",
+    desc: "轻量待办，本地持久化并同步操作记录",
+    icon: CheckSquareOutlined,
+    category: "记录",
+    component: TodoTool,
   },
   {
     id: "history",
