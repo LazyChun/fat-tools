@@ -32,6 +32,9 @@ import {
   CalendarOutlined,
   AimOutlined,
   GiftOutlined,
+  ApartmentOutlined,
+  MedicineBoxOutlined,
+  DollarOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -62,6 +65,10 @@ import BarcodeTool from "./BarcodeTool";
 import WheelTool from "./WheelTool";
 import PeriodicTableTool from "./PeriodicTableTool";
 import RandomStringTool from "./RandomStringTool";
+import HolidayTool from "./HolidayTool";
+import KinshipTool from "./KinshipTool";
+import BloodTypeTool from "./BloodTypeTool";
+import CurrencyTool from "./CurrencyTool";
 
 export type ToolCategory =
   | "文本"
@@ -71,6 +78,7 @@ export type ToolCategory =
   | "绘图"
   | "生成"
   | "时间"
+  | "生活"
   | "记录";
 
 export interface ToolDef {
@@ -134,7 +142,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "hash",
     title: "哈希计算",
-    desc: "文本与文件（分块）MD5 / SHA-1/256/384/512",
+    desc: "文本与文件哈希：MD5 / SHA-1/2/3 / SM3 / CRC-32",
     icon: SafetyCertificateOutlined,
     category: "开发",
     component: HashTool,
@@ -298,6 +306,38 @@ export const TOOLS: ToolDef[] = [
     icon: CalendarOutlined,
     category: "时间",
     component: TimeCalcTool,
+  },
+  {
+    id: "holiday",
+    title: "假期日历",
+    desc: "中国法定节假日月历、倒计时与自定义纪念日",
+    icon: CalendarOutlined,
+    category: "时间",
+    component: HolidayTool,
+  },
+  {
+    id: "kinship",
+    title: "亲友关系图谱",
+    desc: "中文称谓计算器，关系链可视化成图谱",
+    icon: ApartmentOutlined,
+    category: "生活",
+    component: KinshipTool,
+  },
+  {
+    id: "bloodtype",
+    title: "血型图谱",
+    desc: "ABO × Rh 遗传推导、亲子判定与输血兼容",
+    icon: MedicineBoxOutlined,
+    category: "生活",
+    component: BloodTypeTool,
+  },
+  {
+    id: "currency",
+    title: "汇率计算",
+    desc: "多币种汇率换算，支持在线更新与批量换算表",
+    icon: DollarOutlined,
+    category: "数值",
+    component: CurrencyTool,
   },
   {
     id: "todo",

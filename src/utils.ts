@@ -83,270 +83,6 @@ export function bytesToHex(bytes: Uint8Array): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* MD5（纯 JS 实现，支持 UTF-8）                                        */
-/* ------------------------------------------------------------------ */
-
-function leftRotate(x: number, c: number): number {
-  return ((x << c) | (x >>> (32 - c))) >>> 0;
-}
-
-export function md5(input: string | Uint8Array): string {
-  const msg = typeof input === "string" ? toUtf8Bytes(input) : input;
-  const len = msg.length;
-  const bitLen = len * 8;
-  const paddedLen = (((len + 8) >> 6) + 1) * 64;
-  const padded = new Uint8Array(paddedLen);
-  padded.set(msg);
-  padded[len] = 0x80;
-  const dv = new DataView(padded.buffer);
-  dv.setUint32(paddedLen - 8, bitLen >>> 0, true);
-  dv.setUint32(paddedLen - 4, Math.floor(bitLen / 0x100000000), true);
-
-  const K = new Uint32Array(64);
-  for (let i = 0; i < 64; i++) {
-    K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) >>> 0;
-  }
-  const S = [
-    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5,
-    9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11,
-    16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10,
-    15, 21,
-  ];
-
-  let a0 = 0x67452301;
-  let b0 = 0xefcdab89;
-  let c0 = 0x98badcfe;
-  let d0 = 0x10325476;
-
-  for (let off = 0; off < paddedLen; off += 64) {
-    const M = new Uint32Array(16);
-    for (let i = 0; i < 16; i++) M[i] = dv.getUint32(off + i * 4, true);
-    let A = a0;
-    let B = b0;
-    let C = c0;
-    let D = d0;
-    for (let i = 0; i < 64; i++) {
-      let F: number;
-      let g: number;
-      if (i < 16) {
-        F = (B & C) | (~B & D);
-        g = i;
-      } else if (i < 32) {
-        F = (D & B) | (~D & C);
-        g = (5 * i + 1) % 16;
-      } else if (i < 48) {
-        F = B ^ C ^ D;
-        g = (3 * i + 5) % 16;
-      } else {
-        F = C ^ (B | ~D);
-        g = (7 * i) % 16;
-      }
-      F = (F + A + K[i] + M[g]) >>> 0;
-      A = D;
-      D = C;
-      C = B;
-      B = (B + leftRotate(F, S[i])) >>> 0;
-    }
-    a0 = (a0 + A) >>> 0;
-    b0 = (b0 + B) >>> 0;
-    c0 = (c0 + C) >>> 0;
-    d0 = (d0 + D) >>> 0;
-  }
-
-  const out = new Uint8Array(16);
-  const odv = new DataView(out.buffer);
-  odv.setUint32(0, a0, true);
-  odv.setUint32(4, b0, true);
-  odv.setUint32(8, c0, true);
-  odv.setUint32(12, d0, true);
-  return bytesToHex(out);
-}
-
-/** 增量 MD5 计算器（适合大文件流式处理） */
-export class Md5Context {
-  private a = 0x67452301;
-  private b = 0xefcdab89;
-  private c = 0x98badcfe;
-  private d = 0x10325476;
-  private buffer = new Uint8Array(0);
-  private totalBytes = 0;
-
-  private static readonly K = Md5Context.buildK();
-  private static readonly S = [
-    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5,
-    9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11,
-    16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10,
-    15, 21,
-  ];
-
-  private static buildK(): Uint32Array {
-    const K = new Uint32Array(64);
-    for (let i = 0; i < 64; i++) {
-      K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) >>> 0;
-    }
-    return K;
-  }
-
-  private static leftRotate(x: number, c: number): number {
-    return ((x << c) | (x >>> (32 - c))) >>> 0;
-  }
-
-  private processBlock(block: Uint8Array, offset: number): void {
-    const M = new Uint32Array(16);
-    for (let i = 0; i < 16; i++) {
-      M[i] =
-        (block[offset + i * 4] |
-          (block[offset + i * 4 + 1] << 8) |
-          (block[offset + i * 4 + 2] << 16) |
-          (block[offset + i * 4 + 3] << 24)) >>>
-        0;
-    }
-    let A = this.a;
-    let B = this.b;
-    let C = this.c;
-    let D = this.d;
-    for (let i = 0; i < 64; i++) {
-      let F: number;
-      let g: number;
-      if (i < 16) {
-        F = (B & C) | (~B & D);
-        g = i;
-      } else if (i < 32) {
-        F = (D & B) | (~D & C);
-        g = (5 * i + 1) % 16;
-      } else if (i < 48) {
-        F = B ^ C ^ D;
-        g = (3 * i + 5) % 16;
-      } else {
-        F = C ^ (B | ~D);
-        g = (7 * i) % 16;
-      }
-      F = (F + A + Md5Context.K[i] + M[g]) >>> 0;
-      A = D;
-      D = C;
-      C = B;
-      B = (B + Md5Context.leftRotate(F, Md5Context.S[i])) >>> 0;
-    }
-    this.a = (this.a + A) >>> 0;
-    this.b = (this.b + B) >>> 0;
-    this.c = (this.c + C) >>> 0;
-    this.d = (this.d + D) >>> 0;
-  }
-
-  update(chunk: Uint8Array): void {
-    this.totalBytes += chunk.length;
-    const merged = new Uint8Array(this.buffer.length + chunk.length);
-    merged.set(this.buffer, 0);
-    merged.set(chunk, this.buffer.length);
-    let off = 0;
-    while (merged.length - off >= 64) {
-      this.processBlock(merged, off);
-      off += 64;
-    }
-    this.buffer = merged.slice(off);
-  }
-
-  digest(): string {
-    const bitLen = this.totalBytes * 8;
-    const rem = this.buffer.length;
-    const padLen = rem < 56 ? 56 - rem : 120 - rem;
-    const tail = new Uint8Array(rem + padLen + 8);
-    tail.set(this.buffer, 0);
-    tail[rem] = 0x80;
-    const dv = new DataView(tail.buffer);
-    dv.setUint32(tail.length - 8, bitLen >>> 0, true);
-    dv.setUint32(tail.length - 4, Math.floor(bitLen / 0x100000000), true);
-    for (let off = 0; off < tail.length; off += 64)
-      this.processBlock(tail, off);
-    const out = new Uint8Array(16);
-    const odv = new DataView(out.buffer);
-    odv.setUint32(0, this.a, true);
-    odv.setUint32(4, this.b, true);
-    odv.setUint32(8, this.c, true);
-    odv.setUint32(12, this.d, true);
-    return bytesToHex(out);
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* SHA 系列（WebCrypto，异步）                                          */
-/* ------------------------------------------------------------------ */
-
-export type ShaAlgorithm = "SHA-1" | "SHA-256" | "SHA-384" | "SHA-512";
-
-export async function shaHash(
-  algorithm: ShaAlgorithm,
-  input: string,
-): Promise<string> {
-  const data = toUtf8Bytes(input) as unknown as BufferSource;
-  const digest = await crypto.subtle.digest(algorithm, data);
-  return bytesToHex(new Uint8Array(digest));
-}
-
-/** 对原始字节计算 SHA（用于文件等二进制数据） */
-export async function shaHashBytes(
-  algorithm: ShaAlgorithm,
-  data: ArrayBuffer | Uint8Array,
-): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    algorithm,
-    data as unknown as BufferSource,
-  );
-  return bytesToHex(new Uint8Array(digest));
-}
-
-export interface FileHashResult {
-  name: string;
-  md5: string;
-  shas: Record<string, string>;
-  size: number;
-}
-
-const FILE_CHUNK_SIZE = 4 * 1024 * 1024;
-const FILE_SHA_ALGOS: ShaAlgorithm[] = [
-  "SHA-1",
-  "SHA-256",
-  "SHA-384",
-  "SHA-512",
-];
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(2)} KB`;
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(2)} MB`;
-  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
-}
-
-/** 计算本地文件的 MD5 + SHA 系列哈希（纯本地，不上传） */
-export async function hashFile(
-  file: File,
-  onProgress?: (percent: number) => void,
-): Promise<FileHashResult> {
-  const whole = new Uint8Array(await file.arrayBuffer());
-  const md5Ctx = new Md5Context();
-  const chunkCount = Math.max(1, Math.ceil(whole.byteLength / FILE_CHUNK_SIZE));
-  for (let i = 0; i < chunkCount; i++) {
-    const start = i * FILE_CHUNK_SIZE;
-    md5Ctx.update(whole.slice(start, start + FILE_CHUNK_SIZE));
-    if (onProgress) onProgress(Math.round(((i + 1) / chunkCount) * 100));
-    // 让出主线程，避免大文件阻塞 UI
-    if (i < chunkCount - 1) await new Promise((r) => setTimeout(r, 0));
-  }
-  const md5Hex = md5Ctx.digest();
-  const shas: Record<string, string> = {};
-  for (const a of FILE_SHA_ALGOS) {
-    try {
-      shas[a] = await shaHashBytes(a, whole);
-    } catch {
-      shas[a] = "";
-    }
-  }
-  return { name: file.name, md5: md5Hex, shas, size: file.size };
-}
-
-export { formatFileSize };
-
-/* ------------------------------------------------------------------ */
 /* 表达式计算器（递归下降解析，无 eval）                                 */
 /* ------------------------------------------------------------------ */
 
@@ -2127,4 +1863,844 @@ export function generateRandomStrings(
   if (out.length < n)
     throw new Error("去重模式下可用组合不足，已生成 " + out.length + " 条");
   return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* 亲属关系图谱 / 中文称谓计算                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 亲属关系用「一步关系」序列表示（从「自己」出发的路径）。
+ * 例：父亲的母亲 = ["father", "mother"]；妻子的哥哥 = ["wife", "elderBrother"]。
+ * 称谓推导按序列逐级归一化（见 resolveKinship）。
+ */
+export type KinStep =
+  | "father"
+  | "mother"
+  | "husband"
+  | "wife"
+  | "son"
+  | "daughter"
+  | "elderBrother"
+  | "youngerBrother"
+  | "elderSister"
+  | "youngerSister";
+
+export interface KinStepDef {
+  step: KinStep;
+  label: string;
+  /** 反向一步关系（用于图谱双向连边） */
+  inverse: KinStep;
+  /** 是否同性（用于判断能否作为丈夫/妻子等） */
+  gender: "male" | "female";
+  /** 该关系在称谓链中的「代际」变化：+1 长辈，-1 晚辈 */
+  generation: 1 | -1 | 0;
+}
+
+export const KIN_STEPS: KinStepDef[] = [
+  {
+    step: "father",
+    label: "父亲",
+    inverse: "son",
+    gender: "male",
+    generation: 1,
+  },
+  {
+    step: "mother",
+    label: "母亲",
+    inverse: "daughter",
+    gender: "female",
+    generation: 1,
+  },
+  {
+    step: "husband",
+    label: "丈夫",
+    inverse: "wife",
+    gender: "male",
+    generation: 0,
+  },
+  {
+    step: "wife",
+    label: "妻子",
+    inverse: "husband",
+    gender: "female",
+    generation: 0,
+  },
+  {
+    step: "son",
+    label: "儿子",
+    inverse: "father",
+    gender: "male",
+    generation: -1,
+  },
+  {
+    step: "daughter",
+    label: "女儿",
+    inverse: "mother",
+    gender: "female",
+    generation: -1,
+  },
+  {
+    step: "elderBrother",
+    label: "哥哥",
+    inverse: "youngerBrother",
+    gender: "male",
+    generation: 0,
+  },
+  {
+    step: "elderSister",
+    label: "姐姐",
+    inverse: "youngerSister",
+    gender: "female",
+    generation: 0,
+  },
+  {
+    step: "youngerBrother",
+    label: "弟弟",
+    inverse: "elderBrother",
+    gender: "male",
+    generation: 0,
+  },
+  {
+    step: "youngerSister",
+    label: "妹妹",
+    inverse: "elderSister",
+    gender: "female",
+    generation: 0,
+  },
+];
+
+export const KIN_STEP_MAP: Record<KinStep, KinStepDef> = Object.fromEntries(
+  KIN_STEPS.map((s) => [s.step, s]),
+) as Record<KinStep, KinStepDef>;
+
+/** 一步关系的展示标签（未知关系原样返回） */
+export function kinStepLabel(step: string): string {
+  return KIN_STEP_MAP[step as KinStep]?.label ?? step;
+}
+
+/**
+ * 按「平辈排行 + 性别 + 相对年龄」归一化的一步关系。
+ * 称谓只区分：父/母、夫/妻、子/女、兄/弟/姐/妹（年长/年幼 + 性别）。
+ */
+interface NormStep {
+  /** 关系类别 */
+  kind:
+    | "father"
+    | "mother"
+    | "husband"
+    | "wife"
+    | "son"
+    | "daughter"
+    | "sibling";
+  /** sibling 时：是否年长（相对当前主体） */
+  older?: boolean;
+  /** 当前主体性别（用于把 sibling 落到 兄/弟/姐/妹） */
+  subjectGender?: "male" | "female";
+}
+
+function normalizeStep(step: KinStep): NormStep {
+  switch (step) {
+    case "father":
+      return { kind: "father" };
+    case "mother":
+      return { kind: "mother" };
+    case "husband":
+      return { kind: "husband" };
+    case "wife":
+      return { kind: "wife" };
+    case "son":
+      return { kind: "son" };
+    case "daughter":
+      return { kind: "daughter" };
+    case "elderBrother":
+      return { kind: "sibling", older: true, subjectGender: "male" };
+    case "youngerBrother":
+      return { kind: "sibling", older: false, subjectGender: "male" };
+    case "elderSister":
+      return { kind: "sibling", older: true, subjectGender: "female" };
+    case "youngerSister":
+      return { kind: "sibling", older: false, subjectGender: "female" };
+    default:
+      return { kind: "sibling", older: true, subjectGender: "male" };
+  }
+}
+
+/** 直系 / 姻亲称谓表：key = 标准化后的关系序列（逗号分隔），value = 称谓 */
+const KIN_TERMS: Record<string, string> = {
+  // 一族 / 祖辈
+  "father,father": "爷爷",
+  "father,mother": "奶奶",
+  "mother,father": "外公",
+  "mother,mother": "外婆",
+  "father,father,father": "曾祖父",
+  "father,father,mother": "曾祖母",
+  "father,mother,father": "曾外祖父",
+  "father,mother,mother": "曾外祖母",
+  "mother,father,father": "外曾祖父",
+  "mother,father,mother": "外曾祖母",
+  "mother,mother,father": "外曾外祖父",
+  "mother,mother,mother": "外曾外祖母",
+  // 兄弟姐妹 / 堂表
+  sibling: "兄弟姐妹",
+  "father,sibling": "伯父/叔父/姑姑",
+  "father,sibling,older,male": "伯父",
+  "father,sibling,younger,male": "叔叔",
+  "father,sibling,female": "姑姑",
+  "mother,sibling": "舅舅/姨妈",
+  "mother,sibling,male": "舅舅",
+  "mother,sibling,female": "姨妈",
+  "sibling,son": "侄子/外甥",
+  "sibling,daughter": "侄女/外甥女",
+  // 姻亲
+  "wife,father": "岳父",
+  "wife,mother": "岳母",
+  "husband,father": "公公",
+  "husband,mother": "婆婆",
+  "son,wife": "儿媳",
+  "daughter,husband": "女婿",
+  "sibling,wife": "嫂子/弟媳",
+  "sibling,husband": "姐夫/妹夫",
+  "wife,sibling": "大舅子/小舅子/大姨子/小姨子",
+  "husband,sibling": "大伯子/小叔子/大姑子/小姑子",
+  "father,sibling,son": "堂兄弟/表兄弟",
+  "father,sibling,daughter": "堂姐妹/表姐妹",
+  "mother,sibling,son": "表兄弟",
+  "mother,sibling,daughter": "表姐妹",
+  "father,sibling,father": "伯祖父/叔祖父/姑祖父",
+  "father,sibling,mother": "伯祖母/叔祖母/姑祖母",
+  "mother,sibling,father": "舅祖父/姨祖父",
+  "mother,sibling,mother": "舅祖母/姨祖母",
+  "father,sibling,son,son": "堂侄",
+  "father,sibling,daughter,daughter": "堂侄女",
+  "mother,sibling,son,son": "表侄",
+  "wife,sibling,son": "内侄",
+  "husband,sibling,son": "夫侄",
+};
+
+/**
+ * 关系序列的规范化 key：
+ * - 父/母、夫/妻、子/女 保留语义
+ * - 兄/弟/姐/妹 归一为 "sibling"（称谓表本身区分不了排行，故不参与 key）
+ * 归一化后覆盖 1~3 步的常用称谓。
+ */
+function normKey(seq: KinStep[]): string {
+  const parts: string[] = [];
+  for (const s of seq) {
+    const n = normalizeStep(s);
+    parts.push(n.kind === "sibling" ? "sibling" : n.kind);
+  }
+  return parts.join(",");
+}
+
+/**
+ * 中文称谓推导：从「自己」出发的关系序列 → 称谓。
+ * 已收录常见 1~3 步称谓；未收录时给出「逐步拼接」的可读描述（如「父亲的表兄弟」）。
+ */
+export function resolveKinship(seq: KinStep[]): {
+  term: string;
+  known: boolean;
+} {
+  if (seq.length === 0) return { term: "自己", known: true };
+
+  // 一步关系：直接返回关系名（父亲 / 哥哥 / 妻子…，作为「称谓」本身成立）
+  if (seq.length === 1) return { term: kinStepLabel(seq[0]), known: true };
+
+  // 完整命中
+  const exact = KIN_TERMS[normKey(seq)];
+  if (exact) return { term: exact, known: true };
+
+  // 未完整命中：尝试「已收录的前缀称谓 + 剩余关系」拼接
+  for (let cut = seq.length - 1; cut >= 1; cut--) {
+    const prefixTerm = KIN_TERMS[normKey(seq.slice(0, cut))];
+    if (prefixTerm && !prefixTerm.includes("/")) {
+      const restTerm = seq
+        .slice(cut)
+        .map((s) => kinStepLabel(s))
+        .join("的");
+      return { term: `${prefixTerm}的${restTerm}`, known: false };
+    }
+  }
+
+  const plain = seq.map((s) => kinStepLabel(s)).join("的");
+  return { term: plain, known: false };
+}
+
+/** 关系链展示文案（如「父亲 → 母亲」） */
+export function kinshipChainLabel(seq: KinStep[]): string {
+  if (seq.length === 0) return "自己";
+  return seq.map((s) => kinStepLabel(s)).join(" → ");
+}
+
+/**
+ * 反向解析：把一条关系链取反（A 的丈夫的哥哥 ↔ 该哥哥的弟弟的丈夫的方向反转）。
+ * 用于「以对方为参照」重新表述同一条关系。
+ */
+export function invertKinshipChain(seq: KinStep[]): KinStep[] {
+  const out: KinStep[] = [];
+  for (let i = seq.length - 1; i >= 0; i--) {
+    out.push(KIN_STEP_MAP[seq[i]].inverse);
+  }
+  return out;
+}
+
+/**
+ * 称谓反查：给定称谓，返回可能的关系链（用于「称谓 → 关系」的逆向查询）。
+ * 仅覆盖常用单一称谓（无歧义的优先）。
+ */
+export function kinshipByTerm(term: string): KinStep[][] {
+  const clean = term.trim().replace(/[\s　]/g, "");
+  if (!clean) return [];
+  const out: KinStep[][] = [];
+  const seen = new Set<string>();
+  for (const [key, value] of Object.entries(KIN_TERMS)) {
+    for (const candidate of value.split("/")) {
+      if (candidate === clean) {
+        const chain = keyToChain(key);
+        const sig = chain.join(",");
+        if (!seen.has(sig)) {
+          seen.add(sig);
+          out.push(chain);
+        }
+      }
+    }
+  }
+  // 也支持直接输入一步关系（父亲 / 哥哥 / 妻子…）
+  const oneStep = KIN_STEPS.find((s) => s.label === clean);
+  if (oneStep && !seen.has(oneStep.step)) {
+    out.push([oneStep.step]);
+  }
+  return out;
+}
+
+/** 规范化 key → 关系链（把合并后的 sibling 还原为具体一步关系） */
+function keyToChain(key: string): KinStep[] {
+  const tokens = key.split(",");
+  const out: KinStep[] = [];
+  for (const tk of tokens) {
+    switch (tk) {
+      case "father":
+        out.push("father");
+        break;
+      case "mother":
+        out.push("mother");
+        break;
+      case "husband":
+        out.push("husband");
+        break;
+      case "wife":
+        out.push("wife");
+        break;
+      case "son":
+        out.push("son");
+        break;
+      case "daughter":
+        out.push("daughter");
+        break;
+      case "sibling":
+        out.push("elderBrother");
+        break;
+      default:
+        break;
+    }
+  }
+  return out;
+}
+
+/** 全部已收录称谓（含多义项拆分，供搜索提示） */
+export function allKinshipTerms(): { term: string; chain: KinStep[] }[] {
+  const out: { term: string; chain: KinStep[] }[] = [];
+  const seen = new Set<string>();
+  for (const key of Object.keys(KIN_TERMS)) {
+    for (const candidate of KIN_TERMS[key].split("/")) {
+      if (seen.has(candidate)) continue;
+      seen.add(candidate);
+      out.push({ term: candidate, chain: keyToChain(key) });
+    }
+  }
+  out.push({ term: "自己", chain: [] });
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* 血型遗传图谱（ABO × Rh）                                             */
+/* ------------------------------------------------------------------ */
+
+/** ABO 表现型 */
+export type AboPhenotype = "A" | "B" | "AB" | "O";
+/** Rh 表现型 */
+export type RhPhenotype = "+" | "-";
+/** ABO 等位基因 */
+export type AboAllele = "A" | "B" | "O";
+/** Rh 等位基因 */
+export type RhAllele = "D" | "d";
+
+/** 一套血型（ABO + Rh） */
+export interface BloodType {
+  abo: AboPhenotype;
+  rh: RhPhenotype;
+}
+
+/**
+ * 基因型 = 一对等位基因（ABO 两个字母 + Rh 两个字母）。
+ * 例：A 型可能的基因型 AA / AO；Rh+ 可能的 DD / Dd。
+ */
+export interface BloodGenotype {
+  abo: [AboAllele, AboAllele];
+  rh: [RhAllele, RhAllele];
+}
+
+export const ABO_PHENOTYPES: AboPhenotype[] = ["A", "B", "AB", "O"];
+export const RH_PHENOTYPES: RhPhenotype[] = ["+", "-"];
+
+/** ABO：等位基因组合 → 表现型（A/B 为共显性，O 为隐性） */
+export function aboFromAlleles(a: AboAllele, b: AboAllele): AboPhenotype {
+  const has = (x: AboAllele) => a === x || b === x;
+  if (has("A") && has("B")) return "AB";
+  if (has("A")) return "A";
+  if (has("B")) return "B";
+  return "O";
+}
+
+/** Rh：D 为显性（有 D 即阳性），d 为隐性 */
+export function rhFromAlleles(a: RhAllele, b: RhAllele): RhPhenotype {
+  return a === "D" || b === "D" ? "+" : "-";
+}
+
+/** 表现型 → 所有可能的基因型（ABO 表现型最多 2 种，Rh 最多 2 种） */
+export function genotypesOfType(
+  abo: AboPhenotype,
+  rh: RhPhenotype,
+): BloodGenotype[] {
+  const aboPairs: [AboAllele, AboAllele][] = [];
+  const pools: AboAllele[][] = [
+    ["A", "A"],
+    ["A", "O"],
+    ["B", "B"],
+    ["B", "O"],
+    ["A", "B"],
+    ["O", "O"],
+  ];
+  const seenAbo = new Set<string>();
+  for (const [x, y] of pools) {
+    if (aboFromAlleles(x, y) !== abo) continue;
+    const key = [x, y].sort().join("");
+    if (seenAbo.has(key)) continue;
+    seenAbo.add(key);
+    aboPairs.push([x, y]);
+  }
+  const rhPairs: [RhAllele, RhAllele][] =
+    rh === "+"
+      ? [
+          ["D", "D"],
+          ["D", "d"],
+        ]
+      : [["d", "d"]];
+  const out: BloodGenotype[] = [];
+  for (const aa of aboPairs)
+    for (const rr of rhPairs) out.push({ abo: aa, rh: rr });
+  return out;
+}
+
+/** 基因型 → 表现型 */
+export function phenotypeOfGenotype(g: BloodGenotype): BloodType {
+  return {
+    abo: aboFromAlleles(g.abo[0], g.abo[1]),
+    rh: rhFromAlleles(g.rh[0], g.rh[1]),
+  };
+}
+
+/** 单个基因座的配子（等位基因）概率 */
+function gametes<T>(pair: [T, T]): { allele: T; p: number }[] {
+  const map = new Map<T, number>();
+  map.set(pair[0], 0.5);
+  map.set(pair[1], (map.get(pair[1]) ?? 0) + 0.5);
+  return Array.from(map.entries()).map(([allele, p]) => ({ allele, p }));
+}
+
+export interface ChildTypeProbability {
+  type: BloodType;
+  /** 概率 0~1 */
+  probability: number;
+  /** 该表现型对应的基因型（去重后，如 A 型可能是 AA/AO） */
+  genotypes: BloodGenotype[];
+}
+
+export interface InheritanceResult {
+  /** 按概率降序的子女血型分布 */
+  children: ChildTypeProbability[];
+  /** 父母的可能基因型（表现型未知时存在多种） */
+  fatherGenotypes: BloodGenotype[];
+  motherGenotypes: BloodGenotype[];
+}
+
+const ABO_IDX: Record<AboPhenotype, number> = { A: 0, B: 1, AB: 2, O: 3 };
+const RH_IDX: Record<RhPhenotype, number> = { "+": 0, "-": 1 };
+
+function typeKey(t: BloodType): string {
+  return `${t.abo}${t.rh}`;
+}
+
+/**
+ * 双亲血型 → 子女血型概率分布（ABO 与 Rh 独立遗传，概率相乘）。
+ * 若父母表现型对应多种基因型，按各基因型等概率加权（人群基因型未知时的标准简化假设）。
+ */
+export function childBloodTypes(
+  father: BloodType,
+  mother: BloodType,
+): InheritanceResult {
+  const fGenos = genotypesOfType(father.abo, father.rh);
+  const mGenos = genotypesOfType(mother.abo, mother.rh);
+
+  // acc[aboTarget][rhTarget] = 概率
+  const acc: number[][] = Array.from({ length: 4 }, () => [0, 0, 0, 0]);
+  const genoMap = new Map<string, Set<string>>();
+
+  const w = 1 / (fGenos.length * mGenos.length);
+  for (const fg of fGenos) {
+    for (const mg of mGenos) {
+      // ABO
+      for (const ga of gametes(fg.abo)) {
+        for (const gb of gametes(mg.abo)) {
+          const abo = aboFromAlleles(ga.allele, gb.allele);
+          // Rh
+          for (const ra of gametes(fg.rh)) {
+            for (const rb of gametes(mg.rh)) {
+              const rh = rhFromAlleles(ra.allele, rb.allele);
+              const p = w * ga.p * gb.p * ra.p * rb.p;
+              acc[ABO_IDX[abo]][RH_IDX[rh]] += p;
+              const key = typeKey({ abo, rh });
+              if (!genoMap.has(key)) genoMap.set(key, new Set());
+              genoMap
+                .get(key)!
+                .add(
+                  [...fg.abo].sort().join("") +
+                    "/" +
+                    [...mg.abo].sort().join("") +
+                    "·" +
+                    [...fg.rh].sort().join("") +
+                    [...mg.rh].sort().join(""),
+                );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const children: ChildTypeProbability[] = [];
+  ABO_PHENOTYPES.forEach((abo, ai) => {
+    RH_PHENOTYPES.forEach((rh, ri) => {
+      const p = acc[ai][ri];
+      if (p <= 1e-9) return;
+      children.push({
+        type: { abo, rh },
+        probability: p,
+        genotypes: genotypesOfType(abo, rh),
+      });
+    });
+  });
+  children.sort((a, b) => b.probability - a.probability);
+
+  return { children, fatherGenotypes: fGenos, motherGenotypes: mGenos };
+}
+
+/**
+ * 亲子反推：已知孩子血型与一方家长血型，求另一方家长可能的血型。
+ * 返回每一项为该血型 + 其作为家长时生育该孩子的概率（在所有可行基因型下的加权）。
+ */
+export function possibleParentTypes(
+  child: BloodType,
+  knownParent: BloodType,
+): { type: BloodType; probability: number }[] {
+  const out: { type: BloodType; probability: number }[] = [];
+  for (const abo of ABO_PHENOTYPES) {
+    for (const rh of RH_PHENOTYPES) {
+      const candidate: BloodType = { abo, rh };
+      const r = childBloodTypes(candidate, knownParent);
+      const hit = r.children.find(
+        (c) => c.type.abo === child.abo && c.type.rh === child.rh,
+      );
+      if (hit && hit.probability > 1e-9) {
+        out.push({ type: candidate, probability: hit.probability });
+      }
+    }
+  }
+  out.sort((a, b) => b.probability - a.probability);
+  return out;
+}
+
+/** 两个血型能否构成亲子关系（孩子血型是否可能出生于这对家长） */
+export function canBeParents(
+  father: BloodType,
+  mother: BloodType,
+  child: BloodType,
+): boolean {
+  const r = childBloodTypes(father, mother);
+  return r.children.some(
+    (c) =>
+      c.type.abo === child.abo &&
+      c.type.rh === child.rh &&
+      c.probability > 1e-9,
+  );
+}
+
+/** 血型展示文案（如 "A+" / "AB-"） */
+export function bloodTypeLabel(t: BloodType): string {
+  return `${t.abo}${t.rh}`;
+}
+
+/** 血型兼容性（受血者 ← 供血者，ABO + Rh 简化口径） */
+export interface BloodCompatibility {
+  donateTo: BloodType[];
+  receiveFrom: BloodType[];
+}
+
+export function bloodCompatibility(t: BloodType): BloodCompatibility {
+  const aboDonate: Record<AboPhenotype, AboPhenotype[]> = {
+    O: ["A", "B", "AB", "O"],
+    A: ["A", "AB"],
+    B: ["B", "AB"],
+    AB: ["AB"],
+  };
+  // 受者只能接受：自身 ABO 抗原不冲突的血型
+  const aboReceive: Record<AboPhenotype, AboPhenotype[]> = {
+    O: ["O"],
+    A: ["A", "O"],
+    B: ["B", "O"],
+    AB: ["A", "B", "AB", "O"],
+  };
+  // 供血者：Rh- 的红细胞不含 D 抗原，可给 Rh+ / Rh-；Rh+ 只能给 Rh+
+  const rhDonate: RhPhenotype[] = t.rh === "-" ? ["+", "-"] : ["+"];
+  // 受血者：Rh+ 体内无抗 D，可接受 Rh+ / Rh-；Rh- 只能接受 Rh-
+  const rhReceive: RhPhenotype[] = t.rh === "+" ? ["+", "-"] : ["-"];
+
+  const donateTo: BloodType[] = [];
+  for (const abo of aboDonate[t.abo])
+    for (const rh of rhDonate) donateTo.push({ abo, rh });
+
+  const receiveFrom: BloodType[] = [];
+  for (const abo of aboReceive[t.abo])
+    for (const rh of rhReceive) receiveFrom.push({ abo, rh });
+
+  return { donateTo, receiveFrom };
+}
+
+/* ------------------------------------------------------------------ */
+/* 汇率换算                                                            */
+/* ------------------------------------------------------------------ */
+
+export interface CurrencyDef {
+  /** ISO 4217 代码（如 CNY / USD / EUR） */
+  code: string;
+  /** 中文名称 */
+  name: string;
+  /** 符号 */
+  symbol: string;
+  /** 国旗 emoji（可选，便于视觉识别） */
+  flag?: string;
+  /** 常见小数位（展示用） */
+  decimals: number;
+}
+
+/**
+ * 内置常用货币（离线参考汇率以 CNY 为基准，1 外币 = rate 人民币）。
+ * 汇率会波动，内置值仅作离线兜底；可在工具内「在线更新」或手动校准。
+ */
+export const CURRENCIES: CurrencyDef[] = [
+  { code: "CNY", name: "人民币", symbol: "¥", flag: "🇨🇳", decimals: 2 },
+  { code: "USD", name: "美元", symbol: "$", flag: "🇺🇸", decimals: 2 },
+  { code: "EUR", name: "欧元", symbol: "€", flag: "🇪🇺", decimals: 2 },
+  { code: "GBP", name: "英镑", symbol: "£", flag: "🇬🇧", decimals: 2 },
+  { code: "JPY", name: "日元", symbol: "¥", flag: "🇯🇵", decimals: 2 },
+  { code: "HKD", name: "港币", symbol: "HK$", flag: "🇭🇰", decimals: 2 },
+  { code: "MOP", name: "澳门元", symbol: "MOP$", flag: "🇲🇴", decimals: 2 },
+  { code: "TWD", name: "新台币", symbol: "NT$", flag: "🇨🇳", decimals: 2 },
+  { code: "KRW", name: "韩元", symbol: "₩", flag: "🇰🇷", decimals: 0 },
+  { code: "SGD", name: "新加坡元", symbol: "S$", flag: "🇸🇬", decimals: 2 },
+  { code: "AUD", name: "澳元", symbol: "A$", flag: "🇦🇺", decimals: 2 },
+  { code: "CAD", name: "加元", symbol: "C$", flag: "🇨🇦", decimals: 2 },
+  { code: "CHF", name: "瑞士法郎", symbol: "CHF", flag: "🇨🇭", decimals: 2 },
+  { code: "NZD", name: "新西兰元", symbol: "NZ$", flag: "🇳🇿", decimals: 2 },
+  { code: "THB", name: "泰铢", symbol: "฿", flag: "🇹🇭", decimals: 2 },
+  {
+    code: "MYR",
+    name: "马来西亚林吉特",
+    symbol: "RM",
+    flag: "🇲🇾",
+    decimals: 2,
+  },
+  { code: "RUB", name: "卢布", symbol: "₽", flag: "🇷🇺", decimals: 2 },
+  { code: "INR", name: "印度卢比", symbol: "₹", flag: "🇮🇳", decimals: 2 },
+  { code: "AED", name: "迪拉姆", symbol: "AED", flag: "🇦🇪", decimals: 2 },
+  { code: "VND", name: "越南盾", symbol: "₫", flag: "🇻🇳", decimals: 0 },
+];
+
+/**
+ * 内置离线参考汇率：1 单位外币 折合多少人民币（CNY）。
+ * 数据为静态参考值，仅用于离线兜底展示，请以银行/交易所实时牌价为准。
+ */
+export const OFFLINE_RATES_CNY: Record<string, number> = {
+  CNY: 1,
+  USD: 7.12,
+  EUR: 7.78,
+  GBP: 9.05,
+  JPY: 0.0475,
+  HKD: 0.912,
+  MOP: 0.885,
+  TWD: 0.221,
+  KRW: 0.00518,
+  SGD: 5.32,
+  AUD: 4.68,
+  CAD: 5.24,
+  CHF: 8.06,
+  NZD: 4.32,
+  THB: 0.205,
+  MYR: 1.6,
+  RUB: 0.079,
+  INR: 0.0845,
+  AED: 1.94,
+  VND: 0.00028,
+};
+
+/** 汇率表元信息 */
+export interface RateTable {
+  /** 1 单位货币 = rates[code] 人民币 */
+  rates: Record<string, number>;
+  /** 数据来源：内置 / 在线 */
+  source: "offline" | "online";
+  /** 更新时间（online 时有值） */
+  updatedAt?: string;
+  /** 备注 */
+  note?: string;
+}
+
+export const OFFLINE_RATE_TABLE: RateTable = {
+  rates: OFFLINE_RATES_CNY,
+  source: "offline",
+  note: "内置静态参考汇率（仅离线兜底）",
+};
+
+/** 取汇率（未知货币返回 undefined） */
+export function rateOf(table: RateTable, code: string): number | undefined {
+  const r = table.rates[code.toUpperCase()];
+  return typeof r === "number" && r > 0 ? r : undefined;
+}
+
+/**
+ * 汇率换算：amount 个 from 币种 = ? 个 to 币种。
+ * 通过 CNY 作为中转（rate 定义为「1 外币 = rate 人民币」）。
+ */
+export function convertCurrency(
+  table: RateTable,
+  from: string,
+  to: string,
+  amount: number,
+): number {
+  const f = rateOf(table, from);
+  const t = rateOf(table, to);
+  if (f === undefined) throw new Error(`未知货币：${from}`);
+  if (t === undefined) throw new Error(`未知货币：${to}`);
+  if (!Number.isFinite(amount)) throw new Error("金额无效");
+  return (amount * f) / t;
+}
+
+/** 换算并格式化（按目标货币小数位） */
+export function formatCurrency(
+  amount: number,
+  code: string,
+  table: RateTable,
+): string {
+  const def = CURRENCIES.find((c) => c.code === code.toUpperCase());
+  const decimals = def?.decimals ?? 2;
+  const symbol = def?.symbol ?? "";
+  const v = Number.isFinite(amount) ? amount : 0;
+  const abs = Math.abs(v);
+  // 极大 / 极小值避免科学计数法之外的长尾
+  const text =
+    abs >= 1e15 || (abs > 0 && abs < 1e-6)
+      ? v.toExponential(4)
+      : v.toLocaleString("zh-CN", {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
+        });
+  return `${symbol}${text}`;
+}
+
+/**
+ * 交叉汇率：从一串「1 外币 = rate 人民币」反推两币种间的直接汇率。
+ * 用于展示 1 from = ? to。
+ */
+export function crossRate(table: RateTable, from: string, to: string): number {
+  return convertCurrency(table, from, to, 1);
+}
+
+/**
+ * 解析在线汇率 API 返回（er-api 风格：{ rates: { CNY: 7.12, ... }, time_last_update_utc }）。
+ * API 的 rates 通常以某基准币（如 USD）为 1，需换算成「1 外币 = ? CNY」。
+ */
+export function parseOnlineRates(
+  data: unknown,
+  base = "USD",
+): Record<string, number> | null {
+  const rates = (data as { rates?: unknown })?.rates as
+    | Record<string, number>
+    | undefined;
+  if (!rates || typeof rates !== "object") return null;
+  const baseRate = Number(rates[base.toUpperCase()]);
+  if (!Number.isFinite(baseRate) || baseRate <= 0) return null;
+  // API: 1 base = rates[X] 个 X  →  1 X = (1 / rates[X]) 个 base
+  // 再用内置的 base→CNY 汇率换到 CNY
+  const baseToCny = OFFLINE_RATES_CNY[base.toUpperCase()];
+  if (!Number.isFinite(baseToCny)) return null;
+  const out: Record<string, number> = {};
+  for (const [code, raw] of Object.entries(rates)) {
+    const v = Number(raw);
+    if (!Number.isFinite(v) || v <= 0) continue;
+    // 1 code = (baseToCny / v) 人民币
+    out[code.toUpperCase()] = baseToCny / v;
+  }
+  out[base.toUpperCase()] = baseToCny;
+  return Object.keys(out).length > 1 ? out : null;
+}
+
+/** 常见汇率 API（无需 key；多镜像兜底） */
+export const RATE_API_ENDPOINTS = [
+  "https://open.er-api.com/v6/latest/USD",
+  "https://api.exchangerate-api.com/v4/latest/USD",
+];
+
+/** 在线拉取汇率（转成「1 外币 = rate 人民币」，含超时；全部失败返回 null） */
+export async function fetchRatesOnline(
+  timeoutMs = 6000,
+): Promise<RateTable | null> {
+  for (const url of RATE_API_ENDPOINTS) {
+    const controller =
+      typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = controller
+      ? window.setTimeout(() => controller.abort(), timeoutMs)
+      : null;
+    try {
+      const resp = await fetch(url, {
+        signal: controller?.signal,
+        cache: "no-store",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const parsed = parseOnlineRates(data, "USD");
+      if (parsed) {
+        return {
+          rates: parsed,
+          source: "online",
+          updatedAt: new Date().toISOString().slice(0, 19).replace("T", " "),
+          note: `在线汇率（${new URL(url).host}）`,
+        };
+      }
+    } catch {
+      // 尝试下一个接口
+    } finally {
+      if (timer !== null) window.clearTimeout(timer);
+    }
+  }
+  return null;
 }

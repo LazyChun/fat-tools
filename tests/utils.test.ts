@@ -21,38 +21,11 @@ import {
   hslToRgb,
   lineDiff,
   matchPinyin,
-  md5,
   parseHexColor,
   rgbToHex,
   rgbToHsl,
-  shaHash,
   uuidV4,
 } from "../src/utils";
-
-describe("md5", () => {
-  it("标准测试向量", () => {
-    expect(md5("")).toBe("d41d8cd98f00b204e9800998ecf8427e");
-    expect(md5("abc")).toBe("900150983cd24fb0d6963f7d28e17f72");
-    expect(md5("The quick brown fox jumps over the lazy dog")).toBe(
-      "9e107d9d372bb6826bd81d3542a419d6",
-    );
-  });
-  it("UTF-8 中文", () => {
-    expect(md5("你好")).toBe("7eca689f0d3389d9dea66ae112e5cfd7");
-    expect(md5("中文MD5测试")).toBe(md5("中文MD5测试"));
-  });
-});
-
-describe("shaHash", () => {
-  it("SHA-256 标准向量", async () => {
-    expect(await shaHash("SHA-256", "")).toBe(
-      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    );
-    expect(await shaHash("SHA-256", "abc")).toBe(
-      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-    );
-  });
-});
 
 describe("evaluateExpression", () => {
   it("四则运算与优先级", () => {
