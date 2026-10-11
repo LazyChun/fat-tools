@@ -4,14 +4,22 @@
  * 点击卡片 → sdk.router.navigate("/tools/<toolId>")，
  * 真正的工具界面由工作台页 WorkPageView 在右侧工作区渲染。
  */
-import React, { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+} from "react";
 import type { FatNotesPluginSDK } from "fat-notes-sdk";
 import { Empty, Input, Tag } from "antd";
+import { SearchOutlined } from "@ant-design/icons";
 import { TOOLS, type ToolDef } from "./tools/registry";
 import { pathToToolId, toolIdToPath } from "./routes";
 import { getPreferredToolId, setPreferredToolId } from "./preferences";
 import { matchPinyin } from "./utils";
 import ThemeShell from "./ThemeShell";
+import styles from "./MenuView.less";
 
 interface Props {
   sdk: FatNotesPluginSDK;
@@ -56,23 +64,32 @@ const MenuView: React.FC<Props> = ({ sdk }) => {
 
   return (
     <ThemeShell sdk={sdk} padding={10}>
-      <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          minHeight: 0,
+        }}
+      >
         <div style={{ marginBottom: 8 }}>
-          <Input.Search
+          <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索工具…"
+            placeholder="搜索工具..."
             allowClear
             size="small"
+            className={styles.menuSearch}
           />
-          <div style={{ marginTop: 6 }}>
-            <Tag style={{ marginInlineEnd: 0 }}>共 {TOOLS.length} 个工具</Tag>
-          </div>
+          <div className={styles.searchMeta}>共 {TOOLS.length} 个工具</div>
         </div>
 
         <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
           {filtered.length === 0 ? (
-            <Empty description="没有匹配的工具" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            <Empty
+              description="没有匹配的工具"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
           ) : (
             <div
               style={{
@@ -100,11 +117,11 @@ const MenuView: React.FC<Props> = ({ sdk }) => {
 };
 
 /** 工具卡片（选中态蓝框高亮） */
-const ToolCard: React.FC<{ tool: ToolDef; active: boolean; onOpen: () => void }> = ({
-  tool,
-  active,
-  onOpen,
-}) => {
+const ToolCard: React.FC<{
+  tool: ToolDef;
+  active: boolean;
+  onOpen: () => void;
+}> = ({ tool, active, onOpen }) => {
   const Icon = tool.icon;
   return (
     <div
@@ -120,7 +137,8 @@ const ToolCard: React.FC<{ tool: ToolDef; active: boolean; onOpen: () => void }>
         cursor: "pointer",
         userSelect: "none",
         boxShadow: active ? "0 2px 10px rgba(22,119,255,0.18)" : "none",
-        transition: "transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease",
+        transition:
+          "transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease",
       }}
       onMouseEnter={(e) => {
         if (!active) {
@@ -152,7 +170,14 @@ const ToolCard: React.FC<{ tool: ToolDef; active: boolean; onOpen: () => void }>
       >
         {tool.desc}
       </span>
-      <Tag style={{ alignSelf: "flex-start", margin: 0, fontSize: 11, lineHeight: "16px" }}>
+      <Tag
+        style={{
+          alignSelf: "flex-start",
+          margin: 0,
+          fontSize: 11,
+          lineHeight: "16px",
+        }}
+      >
         {tool.category}
       </Tag>
     </div>
