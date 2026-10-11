@@ -1229,3 +1229,375 @@ export function renderMarkdown(md: string): string {
   closeLists();
   return html.join("\n");
 }
+
+/* ------------------------------------------------------------------ */
+/* 摩斯电码（国际摩尔斯电码 ITU-R M.1677-1）                            */
+/* ------------------------------------------------------------------ */
+
+export const MORSE_TABLE: Record<string, string> = {
+  A: ".-",
+  B: "-...",
+  C: "-.-.",
+  D: "-..",
+  E: ".",
+  F: "..-.",
+  G: "--.",
+  H: "....",
+  I: "..",
+  J: ".---",
+  K: "-.-",
+  L: ".-..",
+  M: "--",
+  N: "-.",
+  O: "---",
+  P: ".--.",
+  Q: "--.-",
+  R: ".-.",
+  S: "...",
+  T: "-",
+  U: "..-",
+  V: "...-",
+  W: ".--",
+  X: "-..-",
+  Y: "-.--",
+  Z: "--..",
+  "0": "-----",
+  "1": ".----",
+  "2": "..---",
+  "3": "...--",
+  "4": "....-",
+  "5": ".....",
+  "6": "-....",
+  "7": "--...",
+  "8": "---..",
+  "9": "----.",
+  ".": ".-.-.-",
+  ",": "--..--",
+  "?": "..--..",
+  "'": ".----.",
+  "!": "-.-.--",
+  "/": "-..-.",
+  "(": "-.--.",
+  ")": "-.--.-",
+  "&": ".-...",
+  ":": "---...",
+  ";": "-.-.-.",
+  "=": "-...-",
+  "+": ".-.-.",
+  "-": "-....-",
+  _: "..--.-",
+  '"': ".-..-.",
+  $: "...-..-",
+  "@": ".--.-.",
+};
+
+/** 电码 → 字符的反查表 */
+export const MORSE_REVERSE: Record<string, string> = Object.fromEntries(
+  Object.entries(MORSE_TABLE).map(([ch, code]) => [code, ch]),
+);
+
+/** 无法转换字符的占位符 */
+export const MORSE_UNKNOWN = "?";
+
+/**
+ * 文本 → 摩斯电码
+ * 字母之间以单个空格分隔，单词之间以 " / " 分隔，多行输入按行处理。
+ * 无法转换的字符（如中文）输出占位符 "?"，可用 unsupportedMorseChars 提示用户。
+ */
+export function textToMorse(text: string): string {
+  return normalizeNewlines(text)
+    .split("\n")
+    .map((line) =>
+      line
+        .trim()
+        .split(/\s+/)
+        .filter((w) => w !== "")
+        .map((word) =>
+          [...word].map((ch) => MORSE_TABLE[ch.toUpperCase()] ?? MORSE_UNKNOWN).join(" "),
+        )
+        .join(" / "),
+    )
+    .join("\n");
+}
+
+/**
+ * 摩斯电码 → 文本
+ * 单词以 " / "（或 3 个以上空格）分隔，字母以空格分隔。
+ * 无法识别的电码片段输出占位符 "?"，便于定位错误。
+ */
+export function morseToText(morse: string): string {
+  return normalizeNewlines(morse)
+    .split("\n")
+    .map((line) =>
+      line
+        .trim()
+        .split(/\s*\/\s*|\s{3,}/)
+        .map((word) =>
+          word
+            .trim()
+            .split(/\s+/)
+            .filter((sym) => sym !== "")
+            .map((sym) => MORSE_REVERSE[sym] ?? MORSE_UNKNOWN)
+            .join(""),
+        )
+        .join(" "),
+    )
+    .join("\n");
+}
+
+/** 文本中无法转成摩斯电码的字符（去重、忽略空白） */
+export function unsupportedMorseChars(text: string): string[] {
+  const bad = new Set<string>();
+  for (const ch of text) {
+    if (/\s/.test(ch)) continue;
+    if (!(ch.toUpperCase() in MORSE_TABLE)) bad.add(ch);
+  }
+  return [...bad];
+}
+
+/** 是否只由电码符号（. - 空格 / 换行）构成 */
+export function isMorseSymbols(input: string): boolean {
+  return /^[.\-\s/]*$/.test(input);
+}
+
+/* ------------------------------------------------------------------ */
+/* 时间计算（纯 Date 运算，不做时区转换）                                */
+/* ------------------------------------------------------------------ */
+
+export type DateUnit =
+  | "year"
+  | "month"
+  | "week"
+  | "day"
+  | "hour"
+  | "minute"
+  | "second"
+  | "millisecond";
+
+export const DATE_UNITS: { unit: DateUnit; label: string }[] = [
+  { unit: "year", label: "年" },
+  { unit: "month", label: "月" },
+  { unit: "week", label: "周" },
+  { unit: "day", label: "天" },
+  { unit: "hour", label: "小时" },
+  { unit: "minute", label: "分钟" },
+  { unit: "second", label: "秒" },
+  { unit: "millisecond", label: "毫秒" },
+];
+
+const MS_PER_DAY = 86_400_000;
+
+/** 统一的换行归一化（CRLF → LF） */
+function normalizeNewlines(s: string): string {
+  return s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+export interface CalendarDiff {
+  years: number;
+  months: number;
+  days: number;
+  /** 方向：1 表示 to 在 from 之后，-1 表示之前，0 表示同一时刻 */
+  sign: -1 | 0 | 1;
+}
+
+/**
+ * 自然年月日差值（日历口径）。
+ * 例：2026-01-31 → 2026-03-01 结果为 0 年 1 月 1 天。
+ */
+export function calendarDiff(from: Date, to: Date): CalendarDiff {
+  const diff = to.getTime() - from.getTime();
+  const sign: -1 | 0 | 1 = diff === 0 ? 0 : diff > 0 ? 1 : -1;
+  const start = sign >= 0 ? from : to;
+  const end = sign >= 0 ? to : from;
+
+  // 先按月逼近：取最大的 m，使 start + m 个月 ≤ end（月末夹取，故可能回退一步）
+  let months =
+    (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  if (months < 0) months = 0;
+  let anchor = addToDate(start, months, "month");
+  while (months > 0 && anchor.getTime() > end.getTime()) {
+    months -= 1;
+    anchor = addToDate(start, months, "month");
+  }
+  // 剩余不足一个月的部分按整天计
+  const days = Math.max(0, Math.floor((end.getTime() - anchor.getTime()) / MS_PER_DAY));
+  return { years: Math.floor(months / 12), months: months % 12, days, sign };
+}
+
+export interface TimeDiff {
+  /** 有符号毫秒差（to - from） */
+  milliseconds: number;
+  /** 是否过去（to 早于 from） */
+  negative: boolean;
+  /** 绝对值拆分：天 / 小时 / 分钟 / 秒 */
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  /** 总计（可取小数） */
+  totalDays: number;
+  totalHours: number;
+  totalMinutes: number;
+  /** 总秒数（向下取整） */
+  totalSeconds: number;
+  /** 自然年月日口径 */
+  calendar: CalendarDiff;
+  /** 区间内的工作日数（周一至周五，含首尾） */
+  businessDays: number;
+  /** 周末天数（含首尾） */
+  weekendDays: number;
+}
+
+/** 两个时刻的差值（绝对值拆分 + 总计 + 自然年月日 + 工作日） */
+export function timeDiff(from: Date, to: Date): TimeDiff {
+  const milliseconds = to.getTime() - from.getTime();
+  const abs = Math.abs(milliseconds);
+  return {
+    milliseconds,
+    negative: milliseconds < 0,
+    days: Math.floor(abs / MS_PER_DAY),
+    hours: Math.floor((abs % MS_PER_DAY) / 3_600_000),
+    minutes: Math.floor((abs % 3_600_000) / 60_000),
+    seconds: Math.floor((abs % 60_000) / 1000),
+    totalDays: abs / MS_PER_DAY,
+    totalHours: abs / 3_600_000,
+    totalMinutes: abs / 60_000,
+    totalSeconds: Math.floor(abs / 1000),
+    calendar: calendarDiff(from, to),
+    businessDays: countBusinessDays(from, to),
+    weekendDays: countWeekendDays(from, to),
+  };
+}
+
+/** 把日期归一到当天 00:00（本地时区） */
+function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** 区间 [from, to] 内的自然天数（含首尾，至少 1） */
+function inclusiveDayCount(from: Date, to: Date): number {
+  const a = startOfDay(from).getTime();
+  const b = startOfDay(to).getTime();
+  return Math.floor(Math.abs(b - a) / MS_PER_DAY) + 1;
+}
+
+/** 区间内工作日天数（周一至周五，按自然日计，含首尾） */
+export function countBusinessDays(from: Date, to: Date): number {
+  const a = startOfDay(from);
+  const b = startOfDay(to);
+  const total = inclusiveDayCount(from, to);
+  const fullWeeks = Math.floor(total / 7);
+  let count = fullWeeks * 5;
+  const startDow = (b.getTime() >= a.getTime() ? a : b).getDay();
+  for (let i = 0; i < total % 7; i++) {
+    const dow = (startDow + i) % 7;
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+
+/** 区间内周末天数（周六 / 周日，按自然日计，含首尾） */
+export function countWeekendDays(from: Date, to: Date): number {
+  return inclusiveDayCount(from, to) - countBusinessDays(from, to);
+}
+
+/**
+ * 日期偏移：在基准时刻上加减指定单位的数量。
+ * 年 / 月采用「月末夹取」策略（1 月 31 日 + 1 月 = 2 月 28/29 日），
+ * 其余单位按固定毫秒 / 日历天推进。
+ */
+export function addToDate(base: Date, amount: number, unit: DateUnit): Date {
+  const d = new Date(base.getTime());
+  if (!Number.isFinite(amount)) return d;
+  switch (unit) {
+    case "year":
+      d.setFullYear(d.getFullYear() + amount);
+      break;
+    case "month": {
+      const day = d.getDate();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + amount);
+      // 目标月份的最后一天，避免 JS setMonth 溢出到下个月
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      d.setDate(Math.min(day, lastDay));
+      break;
+    }
+    case "week":
+      d.setDate(d.getDate() + amount * 7);
+      break;
+    case "day":
+      d.setDate(d.getDate() + amount);
+      break;
+    case "hour":
+      d.setHours(d.getHours() + amount);
+      break;
+    case "minute":
+      d.setMinutes(d.getMinutes() + amount);
+      break;
+    case "second":
+      d.setSeconds(d.getSeconds() + amount);
+      break;
+    case "millisecond":
+      d.setMilliseconds(d.getMilliseconds() + amount);
+      break;
+    default:
+      break;
+  }
+  return d;
+}
+
+/** 毫秒 → 「x 天 y 小时 z 分钟 w 秒」可读文案 */
+export function formatDuration(ms: number): string {
+  const abs = Math.abs(ms);
+  const days = Math.floor(abs / MS_PER_DAY);
+  const hours = Math.floor((abs % MS_PER_DAY) / 3_600_000);
+  const minutes = Math.floor((abs % 3_600_000) / 60_000);
+  const seconds = Math.floor((abs % 60_000) / 1000);
+  const parts: string[] = [];
+  if (days) parts.push(`${days} 天`);
+  if (hours) parts.push(`${hours} 小时`);
+  if (minutes) parts.push(`${minutes} 分钟`);
+  if (seconds || parts.length === 0) parts.push(`${seconds} 秒`);
+  return parts.join(" ");
+}
+
+/** 解析「YYYY-MM-DD」「YYYY-MM-DD HH:mm(:ss)」以及带 T / / 的常见写法，失败返回 null */
+export function parseDateTime(input: string): Date | null {
+  const raw = input.trim();
+  if (!raw) return null;
+  const m = raw.match(
+    /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/,
+  );
+  if (m) {
+    const d = new Date(
+      Number(m[1]),
+      Number(m[2]) - 1,
+      Number(m[3]),
+      Number(m[4] ?? 0),
+      Number(m[5] ?? 0),
+      Number(m[6] ?? 0),
+    );
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const fallback = new Date(raw);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+/** 日期 → 「YYYY-MM-DD HH:mm:ss」（本地时区） */
+export function formatDateTime(d: Date): string {
+  const p = (n: number, len = 2): string => String(n).padStart(len, "0");
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  );
+}
+
+/** 日期 → 「YYYY-MM-DD」（本地时区） */
+export function formatDate(d: Date): string {
+  return formatDateTime(d).slice(0, 10);
+}
+
+/** 星期文案 */
+export function weekdayLabel(d: Date): string {
+  return `星期${"日一二三四五六"[d.getDay()]}`;
+}

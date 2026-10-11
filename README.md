@@ -56,6 +56,24 @@ If names don't match you will see:
 - `types/fat-notes-sdk.d.ts` — SDK type declarations (mirror of host).
 - `webpack.config.js` — Module Federation build (`exposes ./plugin`).
 
+## 内置工具（25 个，纯前端实现）
+
+菜单按分类展示，点击卡片 → `sdk.router.navigate("/tools/<toolId>")`。
+
+| 分类 | 工具 |
+| --- | --- |
+| 文本 | 文本对比、字数统计、正则测试、命名转换、行处理、Markdown 预览 |
+| 编码 | Base64、URL 编解码、颜色转换、摩斯电码 |
+| 开发 | JSON 工具、哈希计算、UUID 生成器、时间戳转换、URL 解析、JWT 解析 |
+| 数值 | 计算器、进制转换、单位换算 |
+| 绘图 | 画板 |
+| 生成 | 密码生成器 |
+| 时间 | 秒表 / 倒计时、时间计算器 |
+| 记录 | 待办清单、操作记录 |
+
+> 新增工具只需在 `src/tools/registry.tsx` 加一条记录（`ToolCategory` 已支持上表分类），
+> 纯计算逻辑收敛到 `src/utils.ts`（不依赖 DOM，便于 `vitest` 单测）。
+
 ## 布局约定（参考 fat-stock）
 
 活动栏项 id 必须与工作台页 id 完全一致（本插件均为 `fat-tools.main`），

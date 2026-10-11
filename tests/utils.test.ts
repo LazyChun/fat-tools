@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
+  addToDate,
   base64Decode,
   base64Encode,
+  calendarDiff,
   convertRadix,
+  countBusinessDays,
   countTextStats,
   diffToRows,
   evaluateExpression,
+  formatDateTime,
+  formatDuration,
+  isMorseSymbols,
+  morseToText,
+  parseDateTime,
+  textToMorse,
+  timeDiff,
+  unsupportedMorseChars,
+  weekdayLabel,
   hslToRgb,
   lineDiff,
   md5,
@@ -167,5 +179,136 @@ describe("颜色转换", () => {
   it("缩写与非法输入", () => {
     expect(parseHexColor("#F00")).toEqual({ r: 255, g: 0, b: 0 });
     expect(() => parseHexColor("hello")).toThrow();
+  });
+});
+
+describe("摩斯电码", () => {
+  it("文本 → 电码", () => {
+    expect(textToMorse("SOS")).toBe("... --- ...");
+    expect(textToMorse("hello world")).toBe(".... . .-.. .-.. --- / .-- --- .-. .-.. -..");
+    expect(textToMorse("A1")).toBe(".- .----");
+    expect(textToMorse("a b")).toBe(".- / -...");
+  });
+  it("电码 → 文本", () => {
+    expect(morseToText("... --- ...")).toBe("SOS");
+    expect(morseToText(".... . .-.. .-.. --- / .-- --- .-. .-.. -..")).toBe("HELLO WORLD");
+  });
+  it("单词分隔兼容 / 与 3 个以上空格", () => {
+    expect(morseToText("... --- ... / ... --- ...")).toBe("SOS SOS");
+    expect(morseToText(".... . .-.. .-.. ---   .-- --- .-. .-.. -..")).toBe("HELLO WORLD");
+  });
+  it("往返一致", () => {
+    const samples = ["HELLO WORLD", "SOS", "PYTHON 3.12", "A B C", "TEST-123", "OK?"];
+    for (const s of samples) {
+      expect(morseToText(textToMorse(s))).toBe(s);
+    }
+  });
+  it("多行按行处理", () => {
+    expect(textToMorse("SOS\nSOS")).toBe("... --- ...\n... --- ...");
+    expect(morseToText("... --- ...\n... --- ...")).toBe("SOS\nSOS");
+  });
+  it("无法转换的字符输出占位符", () => {
+    expect(textToMorse("中")).toBe("?");
+    expect(unsupportedMorseChars("a中b文")).toEqual(["中", "文"]);
+    expect(unsupportedMorseChars("ABC 123")).toEqual([]);
+  });
+  it("isMorseSymbols", () => {
+    expect(isMorseSymbols(". - / ...")).toBe(true);
+    expect(isMorseSymbols("")).toBe(true);
+    expect(isMorseSymbols(".- x")).toBe(false);
+  });
+});
+
+describe("时间计算", () => {
+  it("calendarDiff 自然年月日", () => {
+    expect(calendarDiff(new Date(2026, 0, 31), new Date(2026, 2, 1))).toEqual({
+      years: 0,
+      months: 1,
+      days: 1,
+      sign: 1,
+    });
+    expect(calendarDiff(new Date(2026, 9, 11), new Date(2027, 9, 11))).toEqual({
+      years: 1,
+      months: 0,
+      days: 0,
+      sign: 1,
+    });
+    expect(calendarDiff(new Date(2020, 1, 29), new Date(2021, 1, 28))).toEqual({
+      years: 1,
+      months: 0,
+      days: 0,
+      sign: 1,
+    });
+    // 保证各分量非负：不会出现 -1 月 + 28 天
+    expect(calendarDiff(new Date(2026, 0, 31), new Date(2026, 1, 27))).toEqual({
+      years: 0,
+      months: 0,
+      days: 27,
+      sign: 1,
+    });
+  });
+  it("calendarDiff 反向与同一时刻", () => {
+    expect(calendarDiff(new Date(2026, 2, 1), new Date(2026, 0, 31)).sign).toBe(-1);
+    expect(calendarDiff(new Date(2026, 0, 1), new Date(2026, 0, 1))).toEqual({
+      years: 0,
+      months: 0,
+      days: 0,
+      sign: 0,
+    });
+  });
+  it("timeDiff 拆分与总计", () => {
+    const d = timeDiff(new Date(2026, 0, 1, 0, 0, 0), new Date(2026, 0, 2, 3, 4, 5));
+    expect(d.days).toBe(1);
+    expect(d.hours).toBe(3);
+    expect(d.minutes).toBe(4);
+    expect(d.seconds).toBe(5);
+    expect(d.totalSeconds).toBe(97_445);
+    expect(d.negative).toBe(false);
+  });
+  it("timeDiff 反向为负", () => {
+    const d = timeDiff(new Date(2026, 0, 2), new Date(2026, 0, 1));
+    expect(d.negative).toBe(true);
+    expect(d.totalDays).toBe(1);
+  });
+  it("工作日 / 周末统计（含首尾）", () => {
+    // 2026-10-11 是周日
+    expect(new Date(2026, 9, 11).getDay()).toBe(0);
+    // 周一到周五 = 5 个工作日
+    expect(countBusinessDays(new Date(2026, 9, 12), new Date(2026, 9, 16))).toBe(5);
+    // 周六到周日 = 0 个工作日
+    expect(countBusinessDays(new Date(2026, 9, 10), new Date(2026, 9, 11))).toBe(0);
+    // 单个工作日
+    expect(countBusinessDays(new Date(2026, 9, 12), new Date(2026, 9, 12))).toBe(1);
+    // 一整年：2026-01-01(周四) ~ 2026-12-31(周四)
+    const wholeYear = countBusinessDays(new Date(2026, 0, 1), new Date(2026, 11, 31));
+    expect(wholeYear).toBe(261);
+    expect(365 - wholeYear).toBe(104);
+  });
+  it("addToDate 单位推进", () => {
+    const base = new Date(2026, 9, 11, 10, 0, 0);
+    expect(formatDateTime(addToDate(base, 1, "day"))).toBe("2026-10-12 10:00:00");
+    expect(formatDateTime(addToDate(base, -1, "hour"))).toBe("2026-10-11 09:00:00");
+    expect(formatDateTime(addToDate(base, 2, "week"))).toBe("2026-10-25 10:00:00");
+    expect(formatDateTime(addToDate(base, 1, "year"))).toBe("2027-10-11 10:00:00");
+    // 月末夹取：1 月 31 日 + 1 月 = 2 月 28 日（非闰年）
+    expect(formatDateTime(addToDate(new Date(2026, 0, 31), 1, "month"))).toBe("2026-02-28 00:00:00");
+    expect(formatDateTime(addToDate(new Date(2026, 0, 31), 2, "month"))).toBe("2026-03-31 00:00:00");
+  });
+  it("formatDuration", () => {
+    expect(formatDuration(0)).toBe("0 秒");
+    expect(formatDuration(1000 * 60 * 90)).toBe("1 小时 30 分钟");
+    expect(formatDuration(86_400_000 + 3_600_000)).toBe("1 天 1 小时");
+  });
+  it("parseDateTime / formatDateTime", () => {
+    expect(formatDateTime(parseDateTime("2026-10-11 09:30:00")!)).toBe("2026-10-11 09:30:00");
+    expect(formatDateTime(parseDateTime("2026-10-11 09:30")!)).toBe("2026-10-11 09:30:00");
+    expect(formatDateTime(parseDateTime("2026/10/11")!)).toBe("2026-10-11 00:00:00");
+    expect(parseDateTime("")).toBeNull();
+    expect(parseDateTime("   ")).toBeNull();
+    expect(parseDateTime("不是日期")).toBeNull();
+  });
+  it("weekdayLabel", () => {
+    expect(weekdayLabel(new Date(2026, 9, 11))).toBe("星期日");
+    expect(weekdayLabel(new Date(2026, 9, 12))).toBe("星期一");
   });
 });

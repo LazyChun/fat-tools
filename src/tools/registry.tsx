@@ -27,6 +27,8 @@ import {
   SafetyCertificateOutlined,
   SwapOutlined,
   ClockCircleOutlined,
+  ThunderboltOutlined,
+  CalendarOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -51,6 +53,8 @@ import JwtTool from "./JwtTool";
 import UnitTool from "./UnitTool";
 import TimerTool from "./TimerTool";
 import TodoTool from "./TodoTool";
+import MorseTool from "./MorseTool";
+import TimeCalcTool from "./TimeCalcTool";
 
 export type ToolCategory =
   | "文本"
@@ -169,6 +173,14 @@ export const TOOLS: ToolDef[] = [
     component: ColorTool,
   },
   {
+    id: "morse",
+    title: "摩斯电码",
+    desc: "文本与摩斯电码互转，可点播电码音频",
+    icon: ThunderboltOutlined,
+    category: "编码",
+    component: MorseTool,
+  },
+  {
     id: "naming",
     title: "命名转换",
     desc: "camelCase / snake_case / kebab-case 等互转",
@@ -239,6 +251,14 @@ export const TOOLS: ToolDef[] = [
     icon: HourglassOutlined,
     category: "时间",
     component: TimerTool,
+  },
+  {
+    id: "timecalc",
+    title: "时间计算器",
+    desc: "两个时刻相差多少，日期加减推算",
+    icon: CalendarOutlined,
+    category: "时间",
+    component: TimeCalcTool,
   },
   {
     id: "todo",
