@@ -9,6 +9,10 @@ FatNotes Bespoke Plugin — fat-tools Backend Entry Point
 数据库文件：`<workspace>/fatTools/history.db`（stdlib sqlite3，无第三方依赖）。
 """
 
+import re
+import webbrowser
+from urllib.parse import urlparse
+
 from plugin_runtime import handler, run
 
 from service import historyStore  # noqa: F401  （导入即注册 @handler）
@@ -45,6 +49,34 @@ def history_stats(_params):
 def history_db_path(_params):
     """返回当前 SQLite 文件路径（便于排查与展示）。"""
     return {"path": str(historyStore._db_path())}
+
+
+_URL_SCHEME_RE = re.compile(r"^https?://", re.IGNORECASE)
+
+
+@handler("nav.openUrl")
+def nav_open_url(params):
+    """在系统默认浏览器中打开网址（网站导航工具用）。
+
+    params: { url: str } → { ok: bool, error?: str }
+
+    安全限制：仅允许 http / https 链接，且必须带合法主机名，
+    拒绝 file://、javascript: 等协议，避免拉起本地文件或执行脚本。
+    """
+    raw = (params or {}).get("url", "")
+    url = str(raw).strip()
+    if not url or any(ch.isspace() for ch in url):
+        return {"ok": False, "error": "invalid url"}
+    if not _URL_SCHEME_RE.match(url):
+        return {"ok": False, "error": "only http/https is allowed"}
+    host = (urlparse(url).hostname or "").strip()
+    if not host:
+        return {"ok": False, "error": "missing host"}
+    try:
+        # new=2：尽量新开标签页；Windows/macOS/Linux 均由标准库调度默认浏览器
+        return {"ok": bool(webbrowser.open(url, new=2))}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)}
 
 
 if __name__ == "__main__":

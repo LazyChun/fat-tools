@@ -37,6 +37,7 @@ import {
   GiftOutlined,
   ApartmentOutlined,
   ApiOutlined,
+  AppstoreOutlined,
   MedicineBoxOutlined,
   DollarOutlined,
   MoonOutlined,
@@ -89,6 +90,7 @@ import YijingTool from "./YijingTool";
 import PdfTool from "./PdfTool";
 import XmlTool from "./XmlTool";
 import SmartNameTool from "./SmartNameTool";
+import NavTool from "./NavTool";
 
 export type ToolCategory =
   | "文本"
@@ -447,6 +449,14 @@ export const TOOLS: ToolDef[] = [
     icon: CheckSquareOutlined,
     category: "记录",
     component: TodoTool,
+  },
+  {
+    id: "nav",
+    title: "网站导航",
+    desc: "自定义网址导航：多个导航页 / 分组，收藏网站一键打开",
+    icon: AppstoreOutlined,
+    category: "生活",
+    component: NavTool,
   },
   {
     id: "history",
