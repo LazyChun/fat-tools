@@ -40,6 +40,7 @@ import {
   BlockOutlined,
   CompassOutlined,
   FunctionOutlined,
+  ReadOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -79,6 +80,7 @@ import DnsTool from "./DnsTool";
 import ChineseCharTool from "./ChineseCharTool";
 import ZodiacTool from "./ZodiacTool";
 import SciCalcTool from "./SciCalcTool";
+import YijingTool from "./YijingTool";
 
 export type ToolCategory =
   | "文本"
@@ -388,6 +390,14 @@ export const TOOLS: ToolDef[] = [
     icon: FunctionOutlined,
     category: "数值",
     component: SciCalcTool,
+  },
+  {
+    id: "yijing",
+    title: "易经算命",
+    desc: "六十四卦起卦解卦：金钱卦/时间/报数，本卦变卦与爻辞",
+    icon: ReadOutlined,
+    category: "生活",
+    component: YijingTool,
   },
   {
     id: "todo",

@@ -3905,3 +3905,225 @@ export function parseNumberList(input: string): number[] {
     .map(Number)
     .filter((n) => Number.isFinite(n));
 }
+
+/* ------------------------------------------------------------------ */
+/* 易经六十四卦                                                        */
+/* ------------------------------------------------------------------ */
+
+/** 六爻（自下而上，索引 0 = 初爻） */
+export type YaoLine = 0 | 1;
+
+/** 八卦三爻表与名称（与 tools/hexagramData 对应，此处独立以免循环依赖） */
+const BA_GUA_YAO: YaoLine[][] = [
+  [0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0],
+  [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1],
+];
+const BA_GUA_NAME = ["坤", "艮", "坎", "巽", "震", "离", "兑", "乾"];
+
+/** 动爻的三种技法 */
+export type DivinationMethod = "coin" | "time" | "yarrow" | "number";
+
+export interface DivinationLine {
+  /** 本卦该爻阴阳（自下而上） */
+  yao: YaoLine;
+  /** 是否动爻 */
+  moving: boolean;
+}
+
+export interface DivinationResult {
+  method: DivinationMethod;
+  /** 自下而上的六爻（含动爻标记） */
+  lines: DivinationLine[];
+  /** 本卦二进制值（bit0 = 初爻） */
+  originalBits: number;
+  /** 变卦二进制值（无动爻时与本体相同） */
+  changedBits: number;
+  /** 动爻位置（1..6，自下而上；可多个） */
+  movingLines: number[];
+  /** 下卦 / 上卦八卦序号 0..7 */
+  originalLower: number;
+  originalUpper: number;
+  changedLower: number;
+  changedUpper: number;
+  /** 起卦依据（可读文本，用于历史记录与展示） */
+  basis: string;
+  /** 本卦数字（1..64） */
+  originalNo: number;
+  changedNo: number;
+}
+
+/** 八卦索引（0..7）→ 三爻 */
+export function trigramLines(index: number): YaoLine[] {
+  return [...BA_GUA_YAO[((index % 8) + 8) % 8]] as YaoLine[];
+}
+
+/** 三爻 → 八卦索引 */
+export function trigramIndex(lines: YaoLine[]): number {
+  let v = 0;
+  if (lines[0]) v |= 1;
+  if (lines[1]) v |= 2;
+  if (lines[2]) v |= 4;
+  return v;
+}
+
+/** 六爻（自下而上）→ 二进制值（bit0 = 初爻） */
+export function bitsFromLines(lines: YaoLine[]): number {
+  let bits = 0;
+  for (let i = 0; i < 6; i++) if (lines[i]) bits |= 1 << i;
+  return bits;
+}
+
+/** 二进制值 → 六爻（自下而上） */
+export function linesFromBits(bits: number): YaoLine[] {
+  return Array.from({ length: 6 }, (_, i) => (((bits >> i) & 1) ? 1 : 0)) as YaoLine[];
+}
+
+/** 六爻 → 上下卦八卦索引 */
+export function trigramsFromBits(bits: number): { lower: number; upper: number } {
+  return { lower: bits & 7, upper: (bits >> 3) & 7 };
+}
+
+/** 由自下而上的六爻与动爻标记构造完整起卦结果 */
+export function buildDivination(
+  method: DivinationMethod,
+  lines: YaoLine[],
+  movingIdx: number[],
+  basis: string,
+): DivinationResult {
+  const originals = lines.slice(0, 6) as YaoLine[];
+  const moving = new Set(movingIdx);
+  const changed = originals.map((y, i) => (moving.has(i + 1) ? ((1 - y) as YaoLine) : y));
+  const originalBits = bitsFromLines(originals);
+  const changedBits = bitsFromLines(changed);
+  const o = trigramsFromBits(originalBits);
+  const c = trigramsFromBits(changedBits);
+  return {
+    method,
+    lines: originals.map((y, i) => ({ yao: y, moving: moving.has(i + 1) })),
+    originalBits,
+    changedBits,
+    movingLines: [...movingIdx].sort((a, b) => a - b),
+    originalLower: o.lower,
+    originalUpper: o.upper,
+    changedLower: c.lower,
+    changedUpper: c.upper,
+    basis,
+    originalNo: 0,
+    changedNo: 0,
+  };
+}
+
+/** 八卦数（先天数）：乾1 兑2 离3 震4 巽5 坎6 艮7 坤8 */
+const XIANTIAN_ORDER = [7, 6, 5, 4, 3, 2, 1, 0]; // 索引为八卦序号 → 先天数-1
+
+/** 数字 → 先天八卦序号（1..8 → 0..7），0/8 视为坤 */
+export function xiantianTrigramIndex(n: number): number {
+  const k = ((Math.trunc(n) - 1) % 8 + 8) % 8;
+  return XIANTIAN_ORDER[k];
+}
+
+/** 先天八卦序 → 数字（1..8） */
+export function xiantianNumberOf(index: number): number {
+  return XIANTIAN_ORDER.indexOf(((index % 8) + 8) % 8) + 1;
+}
+
+/** 金钱卦（三枚铜钱）：返回 (正面上数, 是否动爻) */
+function coinToss(rng: () => number): { faces: number; moving: boolean } {
+  let faces = 0;
+  for (let i = 0; i < 3; i++) if (rng() < 0.5) faces++;
+  return { faces, moving: faces === 0 || faces === 3 };
+}
+
+/** 摇卦：自下而上六次抛掷三枚铜钱 */
+export function divinateByCoin(rng: () => number = Math.random): DivinationResult {
+  const lines: YaoLine[] = [];
+  const movingIdx: number[] = [];
+  const detail: string[] = [];
+  for (let i = 0; i < 6; i++) {
+    const { faces, moving } = coinToss(rng);
+    // 正面上数 ≥1 记阳，否则阴（三反为老阳，三正为老阴）
+    lines.push(faces >= 1 ? 1 : 0);
+    if (moving) movingIdx.push(i + 1);
+    detail.push(`${faces}正${3 - faces}反${moving ? "（动）" : ""}`);
+  }
+  return buildDivination("coin", lines, movingIdx, `金钱卦 · ${detail.join(" / ")}`);
+}
+
+/** 时间起卦：以（年支数 + 月 + 日）定上卦，加时支数定下卦，合数取动爻 */
+export function divinateByTime(date: Date): DivinationResult {
+  const lunar = toLunar(date);
+  const branchOf = (yy: number): number => ((yy % 12) + 12) % 12 + 1;
+  // 年支序（子=1）：以农历年地支计
+  const lunarYear = lunar ? lunar.year : date.getFullYear();
+  const yearBranch = branchOf(lunarYear - 4);
+  const monthNo = lunar ? lunar.month : date.getMonth() + 1;
+  const dayNo = lunar ? lunar.day : date.getDate();
+  const hourBranch = branchOf(Math.floor((date.getHours() + 1) / 2));
+
+  const upNum = yearBranch + monthNo + dayNo;
+  const downNum = upNum + hourBranch;
+  const upper = xiantianTrigramIndex(upNum);
+  const lower = xiantianTrigramIndex(downNum);
+
+  const upperLines = trigramLines(upper);
+  const lowerLines = trigramLines(lower);
+  const lines = [...lowerLines, ...upperLines] as YaoLine[]; // 自下而上：下卦在初
+
+  // 动爻 = 总数 ÷ 6 之余（余 0 取 6）
+  const total = upNum + downNum;
+  const moving = ((total % 6) + 6) % 6 || 6;
+
+  const basis =
+    `时间起卦 · ${lunar ? `${lunar.ganzhi}年${lunar.monthText}${lunar.dayText}` : formatDate(date)} ` +
+    `${String(date.getHours()).padStart(2, "0")}时｜` +
+    `上卦(${yearBranch}+${monthNo}+${dayNo}=${upNum}) 下卦(+${hourBranch}=${downNum}) 动${moving}爻`;
+
+  return buildDivination("time", lines, [moving], basis);
+}
+
+/** 报数起卦：两个（或三个）数字定上下卦与动爻 */
+export function divinateByNumber(a: number, b: number, c?: number): DivinationResult {
+  const upper = xiantianTrigramIndex(a);
+  const lower = xiantianTrigramIndex(b);
+  const lines = [...trigramLines(lower), ...trigramLines(upper)] as YaoLine[];
+  const total = Math.trunc(a) + Math.trunc(b) + (c === undefined ? 0 : Math.trunc(c));
+  const moving = ((total % 6) + 6) % 6 || 6;
+  const basis = `报数起卦 · 上卦数 ${Math.trunc(a)}、下卦数 ${Math.trunc(b)}${c === undefined ? "" : `、动爻数 ${Math.trunc(c)}`}，动 ${moving} 爻`;
+  return buildDivination("number", lines, [moving], basis);
+}
+
+/** 大衍筮法（简化为随机），同金钱卦但记录为蓍草法 */
+export function divinateByYarrow(rng: () => number = Math.random): DivinationResult {
+  const res = divinateByCoin(rng);
+  return { ...res, method: "yarrow", basis: `大衍筮法（模拟） · ${res.basis.replace("金钱卦 · ", "")}` };
+}
+
+/** 由任意结果重建（用于历史恢复） */
+export function divinationFromBits(
+  method: DivinationMethod,
+  originalBits: number,
+  movingLines: number[],
+  basis: string,
+): DivinationResult {
+  return buildDivination(method, linesFromBits(originalBits), movingLines, basis);
+}
+
+/** 动爻数量 → 断卦主爻（无动爻看卦辞，1 爻看该爻，多爻看变卦或综观） */
+export function judgingRuleText(movingCount: number): string {
+  switch (movingCount) {
+    case 0:
+      return "六爻安静：以本卦卦辞断之，守本卦之义。";
+    case 1:
+      return "一爻独动：以本卦动爻爻辞为主断，变卦为辅。";
+    case 2:
+      return "两爻齐动：以本卦上动爻爻辞为主，下动爻为辅。";
+    case 3:
+      return "三爻发动：本卦与变卦卦辞参看，以本卦为体、变卦为用。";
+    case 4:
+      return "四爻发动：以变卦下静爻爻辞为主，本卦为体。";
+    case 5:
+      return "五爻发动：以变卦唯一静爻爻辞为主，观其变。";
+    default:
+      return "六爻皆动：乾坤用九用六之义，以变卦卦辞为断。";
+  }
+}

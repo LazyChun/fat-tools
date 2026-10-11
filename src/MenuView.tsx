@@ -13,7 +13,6 @@ import React, {
 } from "react";
 import type { FatNotesPluginSDK } from "fat-notes-sdk";
 import { Empty, Input, Tag } from "antd";
-import { SearchOutlined } from "@ant-design/icons";
 import { TOOLS, type ToolDef } from "./tools/registry";
 import { pathToToolId, toolIdToPath } from "./routes";
 import { getPreferredToolId, setPreferredToolId } from "./preferences";
