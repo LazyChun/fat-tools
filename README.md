@@ -92,6 +92,12 @@ sdk.contributions.registerWorkbenchPage({ id: "fat-tools.main", render: () => <W
 - `sdk.commands` — register/execute commands
 - `sdk.store` — read host Redux state
 - `sdk.contributions` — activityBar / primary sidebar / panel / footer / routes / block types
+  - 仪表盘块类型 `fat-tools.calcCard`（「tools」分类：迷你计算器卡片）
+  - 仪表盘块类型 `fat-tools.toolSwitcher`（「other/其他」分类：一张卡片内嵌
+    多个工具并切换；显示配置面板（`registerBlockDisplayConfig`）提供
+    工具选择、默认工具、是否展示切换按钮、切换控件样式与位置，
+    卡片外框（背景色/标题/圆角/边框/内边距）复用宿主 `BlockConfigCommon.PanelDisplay`，
+    编辑态读写走共享 redux（`blockEdit/onUpdateEditBlock`）
 - `sdk.events` — host/plugin event bus
 - `sdk.remoteComponents.PluginBlockBox` — 远程组件（主程序暴露）用于渲染卡片盒
 - `sdk.boards` — 高级插件板卡配置读写：

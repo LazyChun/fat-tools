@@ -16,6 +16,8 @@
  *   - 页脚状态、设置页
  *   - 命令：fat-tools.ping / fat-tools.openTool
  *   - 仪表盘块类型：fat-tools.calcCard（迷你计算器卡片）
+ *                  fat-tools.toolSwitcher（工具卡片，「其他」分类，
+ *                  显示配置支持工具选择 / 是否展示切换按钮 / 样式外框）
  *   - 本插件页激活时隐藏右侧次侧栏与底部面板，让工作区更宽
  */
 import React from "react";
@@ -28,6 +30,9 @@ import { ROUTE_PREFIX, getDefaultRoute, toolIdToPath } from "./routes";
 import { getPreferredToolId, setPreferredToolId } from "./preferences";
 import { initHistoryClient } from "./historyClient";
 import { CALCULATOR_ICON_URL } from "./assets/calculatorIcon";
+import { TOOL_SWITCHER_ICON_URL } from "./assets/toolSwitcherIcon";
+import ToolSwitcherBlock from "./tools/ToolSwitcherBlock";
+import ToolSwitcherDisplayConfig from "./tools/ToolSwitcherDisplayConfig";
 
 const disposables: Disposable[] = [];
 
@@ -178,6 +183,43 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
       index: 1,
       defaultSize: { w: 4, h: 10, minW: 3, minH: 8 },
       render: () => React.createElement(CalculatorTool, { compact: true }),
+    }),
+  );
+
+  // 9.5 「其他」分类：工具卡片（在一张卡片内嵌工具并切换）
+  safeRegister("blockType:toolSwitcher", () =>
+    sdk.contributions.registerBlockType({
+      type: "fat-tools.toolSwitcher",
+      title: "工具",
+      iconUrl: TOOL_SWITCHER_ICON_URL,
+      category: "other",
+      index: 2,
+      defaultSize: { w: 6, h: 24, minW: 4, minH: 8 },
+      // 新建卡片写入 options 的默认值（宿主会深拷贝）
+      defaultOptions: {
+        toolSwitcher: {
+          tools: ["calculator", "json", "timestamp", "uuid"],
+          defaultTool: "calculator",
+          showSwitch: true,
+          switchStyle: "segmented",
+          switchPosition: "top",
+        },
+      },
+      render: (props) =>
+        React.createElement(ToolSwitcherBlock, {
+          config: props.config,
+          inConfig: props.inConfig,
+          sdk,
+        }),
+    }),
+  );
+
+  // 9.6 工具卡片的显示配置面板（组件配置抽屉 > 显示配置）
+  safeRegister("blockDisplayConfig:toolSwitcher", () =>
+    sdk.contributions.registerBlockDisplayConfig({
+      id: "fat-tools.toolSwitcher.config",
+      blockType: "fat-tools.toolSwitcher",
+      render: () => React.createElement(ToolSwitcherDisplayConfig, { sdk }),
     }),
   );
 
