@@ -47,6 +47,9 @@ import {
   FunctionOutlined,
   ReadOutlined,
   RobotOutlined,
+  TableOutlined,
+  SnippetsOutlined,
+  SmileOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -91,6 +94,9 @@ import PdfTool from "./PdfTool";
 import XmlTool from "./XmlTool";
 import SmartNameTool from "./SmartNameTool";
 import NavTool from "./NavTool";
+import GridSplitTool from "./GridSplitTool";
+import GridMergeTool from "./GridMergeTool";
+import MemeTool from "./MemeTool";
 
 export type ToolCategory =
   | "文本"
@@ -283,6 +289,14 @@ export const TOOLS: ToolDef[] = [
     component: DrawTool,
   },
   {
+    id: "meme",
+    title: "表情包制作",
+    desc: "模板/上传底图，顶底文字描边，自动适配字号，导出 PNG",
+    icon: SmileOutlined,
+    category: "绘图",
+    component: MemeTool,
+  },
+  {
     id: "password",
     title: "密码生成器",
     desc: "加密安全随机密码，含强度评估与批量生成",
@@ -425,6 +439,22 @@ export const TOOLS: ToolDef[] = [
     icon: ScissorOutlined,
     category: "文件",
     component: (props) => <PdfTool {...props} mode="split" />,
+  },
+  {
+    id: "grid-split",
+    title: "格子拆图",
+    desc: "按行列网格把一张图拆成多张 PNG，默认 3×3 可自定义，ZIP 打包",
+    icon: TableOutlined,
+    category: "文件",
+    component: GridSplitTool,
+  },
+  {
+    id: "grid-merge",
+    title: "格子合图",
+    desc: "多张图片按行列网格拼成一张大图，默认 3×3 可自定义",
+    icon: SnippetsOutlined,
+    category: "文件",
+    component: GridMergeTool,
   },
   {
     id: "xml",

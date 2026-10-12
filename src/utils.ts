@@ -6644,3 +6644,282 @@ export function chunkPageRanges(total: number, size: number): PageRangesResult {
   }
   return { ok: true, segs, pages };
 }
+
+/* ------------------------------------------------------------------ */
+/* 格子拆图 / 格子合图（sprite grid）纯函数                              */
+/* ------------------------------------------------------------------ */
+
+export interface GridCellBounds {
+  /** 行索引（0-based） */
+  row: number;
+  /** 列索引（0-based） */
+  col: number;
+  /** 在源图中的 x 起点（px） */
+  x: number;
+  /** 在源图中的 y 起点（px） */
+  y: number;
+  /** 格子宽度（px） */
+  w: number;
+  /** 格子高度（px） */
+  h: number;
+}
+
+/**
+ * 计算 rows×cols 网格中每个格子在 width×height 画布上的边界。
+ * 整除余数全部追加到最后一列 / 最后一行，保证所有格子无缝拼回原图。
+ * 图片尺寸小于格子数（如 2px 宽拆 3 列）时返回空数组。
+ */
+export function gridCellBounds(
+  rows: number,
+  cols: number,
+  width: number,
+  height: number,
+): GridCellBounds[] {
+  const r = Math.max(1, Math.floor(rows));
+  const c = Math.max(1, Math.floor(cols));
+  const w = Math.floor(width);
+  const h = Math.floor(height);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < c || h < r) return [];
+  const cellW = Math.floor(w / c);
+  const cellH = Math.floor(h / r);
+  const out: GridCellBounds[] = [];
+  for (let row = 0; row < r; row++) {
+    const y = row * cellH;
+    const ch = row === r - 1 ? h - y : cellH;
+    for (let col = 0; col < c; col++) {
+      const x = col * cellW;
+      const cw = col === c - 1 ? w - x : cellW;
+      out.push({ row, col, x, y, w: cw, h: ch });
+    }
+  }
+  return out;
+}
+
+/** 拆分产物文件名：base_r01_c01.png（行列 1-based，按总行列数补零对齐字典序） */
+export function gridCellFileName(
+  base: string,
+  rows: number,
+  cols: number,
+  row: number,
+  col: number,
+): string {
+  const pad = Math.max(String(Math.floor(rows)).length, String(Math.floor(cols)).length);
+  const rr = String(row + 1).padStart(pad, "0");
+  const cc = String(col + 1).padStart(pad, "0");
+  return `${base}_r${rr}_c${cc}.png`;
+}
+
+/** 去掉扩展名并清洗为安全的文件名基底（保留中文与 . - _，空则回退 "sprite"） */
+export function safeFileBase(name: string): string {
+  const base = name
+    .replace(/\.[^.]+$/, "")
+    .replace(/[\\/:*?"<>|\s]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+  return base || "sprite";
+}
+
+/** 文件大小人性化（B / KB / MB / GB） */
+export function humanFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+/* ------------------------------------------------------------------ */
+/* 表情包制作（meme）纯函数                                              */
+/* ------------------------------------------------------------------ */
+
+/** 内置底图模板（程序化绘制，无版权依赖） */
+export type MemeTemplateKey = "plain" | "yellow" | "green" | "dark" | "rainbow" | "grid";
+
+export interface MemeTemplate {
+  key: MemeTemplateKey;
+  name: string;
+  desc: string;
+  width: number;
+  height: number;
+}
+
+/** 内置表情包底图模板定义 */
+export const MEME_TEMPLATES: MemeTemplate[] = [
+  { key: "plain", name: "纯白", desc: "白底浅框，适合任意配图", width: 800, height: 600 },
+  { key: "yellow", name: "黄豆脸", desc: "经典黄豆震惊脸", width: 800, height: 600 },
+  { key: "green", name: "绿蛙脸", desc: "绿蛙无语脸", width: 600, height: 600 },
+  { key: "dark", name: "深空", desc: "深色星空底", width: 800, height: 600 },
+  { key: "rainbow", name: "彩虹", desc: "蓝紫渐变底", width: 800, height: 600 },
+  { key: "grid", name: "网格纸", desc: "浅色网格底", width: 800, height: 600 },
+];
+
+/** 按 key 取模板（未知 key 回退纯白） */
+export function memeTemplateOf(key: MemeTemplateKey): MemeTemplate {
+  return MEME_TEMPLATES.find((t) => t.key === key) || MEME_TEMPLATES[0];
+}
+
+/**
+ * 表情包文字换行：按空白切词，超长词按字符硬切；
+ * 最多 maxLines 行，超出的内容丢弃（meme 顶/底一般各 2 行）。
+ */
+export function wrapMemeText(text: string, maxLenPerLine: number, maxLines: number): string[] {
+  const src = String(text ?? "").trim();
+  if (!src || maxLenPerLine < 1 || maxLines < 1) return [];
+  const lines: string[] = [];
+  let cur = "";
+  const pushLine = (s: string) => {
+    if (lines.length < maxLines) lines.push(s);
+  };
+  for (const w of src.split(/\s+/).filter(Boolean)) {
+    if ([...w].length > maxLenPerLine) {
+      // 超长词：先把当前行落定，再按字符硬切
+      if (cur) {
+        pushLine(cur);
+        cur = "";
+      }
+      let chunk = "";
+      for (const ch of [...w]) {
+        chunk += ch;
+        if ([...chunk].length >= maxLenPerLine) {
+          pushLine(chunk);
+          chunk = "";
+        }
+      }
+      cur = chunk;
+      continue;
+    }
+    const candidate = cur ? `${cur} ${w}` : w;
+    if ([...candidate].length <= maxLenPerLine) {
+      cur = candidate;
+    } else {
+      pushLine(cur);
+      cur = w;
+    }
+  }
+  if (cur) pushLine(cur);
+  return lines;
+}
+
+/** 字号适配参数 */
+export interface MemeFitOptions {
+  lines: string[];
+  maxWidth: number;
+  maxHeight: number;
+  baseFontSize: number;
+  minFontSize: number;
+  /** 单行文本在某字号下的像素宽度（调用方注入 ctx.measureText） */
+  measure: (line: string, fontSize: number) => number;
+  /** 行高系数（行高 = fontSize × lineHeight） */
+  lineHeight?: number;
+}
+
+/** 在 [minFontSize, baseFontSize] 内二分找能放下全部行且不超宽的最大字号 */
+export function memeFitFontSize(opts: MemeFitOptions): number {
+  const { lines, maxWidth, maxHeight, baseFontSize, minFontSize, measure, lineHeight = 1.15 } = opts;
+  if (!lines.length || maxWidth <= 0 || maxHeight <= 0) return minFontSize;
+  const fits = (fs: number): boolean =>
+    lines.every((l) => measure(l, fs) <= maxWidth) && lines.length * fs * lineHeight <= maxHeight;
+  if (fits(baseFontSize)) return baseFontSize;
+  if (!fits(minFontSize)) return minFontSize;
+  let lo = minFontSize;
+  let hi = baseFontSize;
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (fits(mid)) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** 顶部 / 底部文字区布局结果 */
+export interface MemeZone {
+  lines: string[];
+  /** 文本锚点 x（水平居中） */
+  x: number;
+  /** 每行文字基线 y */
+  ys: number[];
+  fontSize: number;
+  lineHeight: number;
+}
+
+export interface MemeLayoutSpec {
+  width: number;
+  height: number;
+  topText: string;
+  bottomText: string;
+  baseFontSize: number;
+  minFontSize: number;
+  /** 顶部区留白（px） */
+  topPadding: number;
+  /** 底部区留白（px） */
+  bottomPadding: number;
+  measure: (line: string, fontSize: number) => number;
+  lineHeight?: number;
+}
+
+export interface MemeLayout {
+  top: MemeZone | null;
+  bottom: MemeZone | null;
+}
+
+/**
+ * 计算顶 / 底文字区的换行、字号与基线位置：
+ * 区域高 = max(2 × 留白, 画布高 × 0.3)，文字在区内垂直居中、水平居中。
+ */
+export function memeTextLayout(spec: MemeLayoutSpec): MemeLayout {
+  const {
+    width,
+    height,
+    topText,
+    bottomText,
+    baseFontSize,
+    minFontSize,
+    topPadding,
+    bottomPadding,
+    measure,
+    lineHeight = 1.15,
+  } = spec;
+  const maxWidth = width * 0.94;
+  // 按当前基准字号估算每行最大字符数（拉丁约 0.55em、中文 1em，取保守值）
+  const avgW = Math.max(measure("汉", baseFontSize), baseFontSize * 0.55);
+  const maxChars = Math.max(4, Math.floor(maxWidth / avgW));
+
+  const buildZone = (text: string, zoneHeight: number, pad: number): MemeZone | null => {
+    const lines = wrapMemeText(text, maxChars, 2);
+    if (!lines.length) return null;
+    const fontSize = memeFitFontSize({
+      lines,
+      maxWidth,
+      maxHeight: zoneHeight,
+      baseFontSize,
+      minFontSize,
+      measure,
+      lineHeight,
+    });
+    const blockH = lines.length * fontSize * lineHeight;
+    const x = width / 2;
+    const ys = lines.map(
+      (_, i) => pad + (zoneHeight - blockH) / 2 + fontSize + i * fontSize * lineHeight,
+    );
+    return { lines, x, ys, fontSize, lineHeight };
+  };
+
+  const topH = Math.max(topPadding * 2, height * 0.3);
+  const bottomH = Math.max(bottomPadding * 2, height * 0.3);
+  const top = buildZone(topText, topH, topPadding);
+  const bottom = buildZone(bottomText, bottomH, bottomPadding);
+  if (bottom) {
+    // 底部区：从画布底部向上排布
+    const blockH = bottom.lines.length * bottom.fontSize * bottom.lineHeight;
+    const startY = height - bottomPadding - (bottomH - blockH) / 2 - blockH;
+    bottom.ys = bottom.lines.map(
+      (_, i) => startY + bottom.fontSize + i * bottom.fontSize * bottom.lineHeight,
+    );
+  }
+  return { top, bottom };
+}
+
+/** 表情包导出文件名（基于时间戳） */
+export function memeFileName(ext: string): string {
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  return `meme-${ts}.${ext}`;
+}
