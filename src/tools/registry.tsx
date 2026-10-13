@@ -51,6 +51,7 @@ import {
   CameraOutlined,
   SnippetsOutlined,
   SmileOutlined,
+  FileSyncOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -99,6 +100,7 @@ import GridSplitTool from "./GridSplitTool";
 import GridMergeTool from "./GridMergeTool";
 import MemeTool from "./MemeTool";
 import ScreenshotTool from "./ScreenshotTool";
+import ConvertTool from "./ConvertTool";
 
 export type ToolCategory =
   | "文本"
@@ -465,6 +467,14 @@ export const TOOLS: ToolDef[] = [
     icon: CameraOutlined,
     category: "文件",
     component: ScreenshotTool,
+  },
+  {
+    id: "media-convert",
+    title: "格式转换",
+    desc: "批量转换图片 / 视频 / 音频格式（宿主 ffmpeg）",
+    icon: FileSyncOutlined,
+    category: "文件",
+    component: ConvertTool,
   },
   {
     id: "xml",

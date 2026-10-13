@@ -17,6 +17,7 @@ from plugin_runtime import handler, run
 
 from service import historyStore  # noqa: F401  （导入即注册 @handler）
 from service import screenshotService  # noqa: F401  （导入即注册 @handler）
+from service import convertService  # noqa: F401  （导入即注册 @handler）
 
 
 @handler("history.add")
