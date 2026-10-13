@@ -18,6 +18,7 @@
  *
  * 其它贡献点：
  *   - 路由页注册（供宿主面包屑 / 全局导航识别）
+ *   - 全局搜索注册（每个工具注册为可搜索项，宿主全局搜索可直达）
  *   - 页脚状态、设置页
  *   - 命令：fat-tools.ping / fat-tools.openTool
  *   - 仪表盘块类型：fat-tools.calcCard（迷你计算器卡片）
@@ -49,7 +50,10 @@ const ACTIVITY_ID = "fat-tools.main";
  * 某个宿主版本缺少某个 SDK 方法时，不能让它中断整个 activate()，
  * 否则后续贡献点与首屏 UI 都会一起消失（表现为"插件加载后啥都没有"）。
  */
-function safeRegister(label: string, fn: () => Disposable | undefined | null): void {
+function safeRegister(
+  label: string,
+  fn: () => Disposable | undefined | null,
+): void {
   try {
     const d = fn();
     if (d) disposables.push(d);
@@ -76,7 +80,9 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
 
   // 2. 主侧边栏（次面板）：只展示工具菜单
   safeRegister("primarySidebar", () =>
-    sdk.contributions.registerPrimarySidebar(() => React.createElement(MenuView, { sdk })),
+    sdk.contributions.registerPrimarySidebar(() =>
+      React.createElement(MenuView, { sdk }),
+    ),
   );
 
   // 3. 工作台整页（右侧工作区）：id 与活动栏项一致，宿主才会在右侧渲染它
@@ -117,10 +123,42 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
     }),
   );
 
+  // 5.5 全局搜索注册：每个工具注册为一个搜索项（匹配文本 / 图标 / 点击直达）
+  safeRegister("searchProvider", () =>
+    sdk.contributions.registerSearchProvider({
+      id: "fat-tools.search",
+      name: "fat-tools 工具箱",
+      items: TOOLS.map((tool) => ({
+        id: tool.id,
+        title: tool.title,
+        desc: tool.desc,
+        icon: tool.icon,
+        // 关键词：工具 id、中文分类、id 拆词与连写（"text-diff" → text / diff / "text diff"）
+        keywords: Array.from(
+          new Set([
+            tool.id,
+            tool.category,
+            ...tool.id.split("-"),
+            tool.id.split("-").join(" "),
+          ]),
+        ),
+        tag: "工具",
+        activityId: ACTIVITY_ID,
+        onSelect: () => {
+          setPreferredToolId(tool.id);
+          const path = toolIdToPath(tool.id);
+          if (path) sdk.router.navigate(path);
+        },
+      })),
+    }),
+  );
+
   // 6. 命令：ping
   safeRegister("command:ping", () =>
     sdk.commands.register("fat-tools.ping", async () => {
-      sdk.ui.toast.info(`[fat-tools] pong（宿主 ${sdk.host.version}，工具数 ${TOOLS.length}）`);
+      sdk.ui.toast.info(
+        `[fat-tools] pong（宿主 ${sdk.host.version}，工具数 ${TOOLS.length}）`,
+      );
       return "pong";
     }),
   );
@@ -150,7 +188,11 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
         React.createElement(
           "div",
           { style: { padding: 20, maxWidth: 560 } },
-          React.createElement("h3", { style: { marginTop: 0 } }, "fat-tools 工具箱"),
+          React.createElement(
+            "h3",
+            { style: { marginTop: 0 } },
+            "fat-tools 工具箱",
+          ),
           React.createElement(
             "p",
             null,
@@ -246,10 +288,17 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
   const syncHide = (activeKey: string | undefined): void => {
     const shouldHide = activeKey === ACTIVITY_KEY;
     if (shouldHide) {
-      if (!hideSecondaryDisposable && typeof sdk.contributions.registerHideSecondarySidebar === "function") {
-        hideSecondaryDisposable = sdk.contributions.registerHideSecondarySidebar();
+      if (
+        !hideSecondaryDisposable &&
+        typeof sdk.contributions.registerHideSecondarySidebar === "function"
+      ) {
+        hideSecondaryDisposable =
+          sdk.contributions.registerHideSecondarySidebar();
       }
-      if (!hidePanelDisposable && typeof sdk.contributions.registerHidePanel === "function") {
+      if (
+        !hidePanelDisposable &&
+        typeof sdk.contributions.registerHidePanel === "function"
+      ) {
         hidePanelDisposable = sdk.contributions.registerHidePanel();
       }
     } else {
@@ -263,7 +312,9 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
   try {
     syncHide(sdk.store.select(selectActivityMenuKey));
     disposables.push(
-      sdk.store.subscribe(selectActivityMenuKey, (nextKey) => syncHide(nextKey)),
+      sdk.store.subscribe(selectActivityMenuKey, (nextKey) =>
+        syncHide(nextKey),
+      ),
     );
   } catch (e) {
     // eslint-disable-next-line no-console
