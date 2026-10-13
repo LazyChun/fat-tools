@@ -9,7 +9,13 @@
  *   5. 1s 轮询 convert.status：总体进度 + 每文件进度，可取消
  *   6. 完成后统计 + 打开输出目录
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   Button,
@@ -40,8 +46,14 @@ import { humanFileSize } from "../utils";
 
 const { Text } = Typography;
 
-type MediaType = "image" | "video" | "audio";
-type ItemStatus = "queued" | "converting" | "done" | "failed" | "skipped" | "cancelled";
+type MediaType = "image" | "video" | "audio" | "document";
+type ItemStatus =
+  | "queued"
+  | "converting"
+  | "done"
+  | "failed"
+  | "skipped"
+  | "cancelled";
 
 interface MediaSummary {
   formatName?: string | null;
@@ -82,11 +94,13 @@ const MEDIA_LABEL: Record<MediaType, string> = {
   image: "图片",
   video: "视频",
   audio: "音频",
+  document: "文档",
 };
 const MEDIA_COLOR: Record<MediaType, string> = {
   image: "blue",
   video: "purple",
   audio: "green",
+  document: "orange",
 };
 const STATUS_LABEL: Record<ItemStatus, string> = {
   queued: "排队中",
@@ -101,11 +115,13 @@ const FALLBACK_FORMATS: Record<MediaType, string[]> = {
   image: ["png", "jpg", "webp", "bmp", "gif", "tiff"],
   video: ["mp4", "mkv", "mov", "avi", "webm", "ts"],
   audio: ["mp3", "wav", "aac", "flac", "ogg", "m4a", "opus", "wma"],
+  document: ["pdf"],
 };
 const DEFAULT_TARGET: Record<MediaType, string> = {
   image: "png",
   video: "mp4",
   audio: "mp3",
+  document: "pdf",
 };
 
 function fmtDuration(ms?: number | null): string | null {
@@ -135,7 +151,8 @@ function fmtSummary(it: ConvertItem): string {
 const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
   const [envReady, setEnvReady] = useState<boolean | null>(null);
   const [envVersion, setEnvVersion] = useState<string | null>(null);
-  const [formats, setFormats] = useState<Record<MediaType, string[]>>(FALLBACK_FORMATS);
+  const [formats, setFormats] =
+    useState<Record<MediaType, string[]>>(FALLBACK_FORMATS);
 
   const [state, setState] = useState<TaskState>({
     running: false,
@@ -145,7 +162,9 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
     skipped: 0,
     items: [],
   });
-  const [targets, setTargets] = useState<Record<MediaType, string>>({ ...DEFAULT_TARGET });
+  const [targets, setTargets] = useState<Record<MediaType, string>>({
+    ...DEFAULT_TARGET,
+  });
   const [quality, setQuality] = useState<"high" | "medium" | "low">("medium");
   const [audioBitrate, setAudioBitrate] = useState("192k");
   const [outputMode, setOutputMode] = useState<"same" | "custom">("same");
@@ -229,7 +248,9 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
       return;
     }
     if (recordedRef.current) return;
-    if (state.items.some((it) => it.status === "done" || it.status === "failed")) {
+    if (
+      state.items.some((it) => it.status === "done" || it.status === "failed")
+    ) {
       recordedRef.current = true;
       recordUsage({
         toolId: "media-convert",
@@ -263,7 +284,9 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
         return;
       }
       if (r?.items?.length) {
-        message.success(`已添加 ${r.items.length} 个文件${r.skipped ? `（跳过 ${r.skipped} 个非媒体/重复项）` : ""}`);
+        message.success(
+          `已添加 ${r.items.length} 个文件${r.skipped ? `（跳过 ${r.skipped} 个非媒体/重复项）` : ""}`,
+        );
         void refresh();
       }
     } catch (e) {
@@ -382,7 +405,16 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
       setStarting(false);
       startingRef.current = false;
     }
-  }, [envReady, mediaTypes, targets, quality, audioBitrate, outputMode, outputDir, refresh]);
+  }, [
+    envReady,
+    mediaTypes,
+    targets,
+    quality,
+    audioBitrate,
+    outputMode,
+    outputDir,
+    refresh,
+  ]);
 
   const cancelConvert = useCallback(async () => {
     const sdk = getSdk();
@@ -421,7 +453,10 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
     const convertingPct = items
       .filter((it) => it.status === "converting")
       .reduce((acc, it) => acc + (it.percent || 0), 0);
-    return Math.min(100, ((finished + convertingPct / 100) / state.total) * 100);
+    return Math.min(
+      100,
+      ((finished + convertingPct / 100) / state.total) * 100,
+    );
   }, [state, items]);
 
   const columns = useMemo(
@@ -442,7 +477,10 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
         ellipsis: true,
         render: (_: unknown, it: ConvertItem) => (
           <Tooltip title={it.path} placement="topLeft">
-            <Text strong={it.status === "converting"} style={{ fontSize: 12.5 }}>
+            <Text
+              strong={it.status === "converting"}
+              style={{ fontSize: 12.5 }}
+            >
               {it.name}
             </Text>
           </Tooltip>
@@ -499,7 +537,11 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                   showInfo={pct != null}
                   style={{ width: pct == null ? 100 : 110, marginBottom: 0 }}
                 />
-                {it.speed ? <Text type="secondary" style={{ fontSize: 11 }}>{it.speed}</Text> : null}
+                {it.speed ? (
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    {it.speed}
+                  </Text>
+                ) : null}
               </Space>
             );
           }
@@ -520,7 +562,9 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                       : "secondary"
                 }
               >
-                {it.status === "done" && it.outputSize ? `完成（${humanFileSize(it.outputSize)}）` : STATUS_LABEL[it.status]}
+                {it.status === "done" && it.outputSize
+                  ? `完成（${humanFileSize(it.outputSize)}）`
+                  : STATUS_LABEL[it.status]}
               </Text>
             );
           return statusText;
@@ -574,15 +618,19 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
   );
 
   return (
-    <ToolShell title="格式转换" onBack={onBack} extra={
-      envReady === false ? (
-        <Tag color="error">宿主 ffmpeg 未安装</Tag>
-      ) : envReady ? (
-        <Tag color="success" icon={<ThunderboltOutlined />}>
-          {envVersion ? "ffmpeg 就绪" : "ffmpeg 就绪"}
-        </Tag>
-      ) : null
-    }>
+    <ToolShell
+      title="格式转换"
+      onBack={onBack}
+      extra={
+        envReady === false ? (
+          <Tag color="error">宿主 ffmpeg 未安装</Tag>
+        ) : envReady ? (
+          <Tag color="success" icon={<ThunderboltOutlined />}>
+            {envVersion ? "ffmpeg 就绪" : "ffmpeg 就绪"}
+          </Tag>
+        ) : null
+      }
+    >
       {envReady === false && (
         <Alert
           type="warning"
@@ -629,7 +677,9 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
         rowKey="id"
         columns={columns}
         dataSource={items}
-        pagination={items.length > 50 ? { pageSize: 50, hideOnSinglePage: true } : false}
+        pagination={
+          items.length > 50 ? { pageSize: 50, hideOnSinglePage: true } : false
+        }
         scroll={{ y: 300 }}
         locale={{
           emptyText: (
@@ -651,7 +701,11 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
         style={{ marginBottom: 12 }}
       />
 
-      <Space direction="vertical" size={8} style={{ width: "100%", maxWidth: 560 }}>
+      <Space
+        direction="vertical"
+        size={8}
+        style={{ width: "100%", maxWidth: 560 }}
+      >
         {mediaTypes.size > 0 && (
           <Space wrap size={16}>
             {Array.from(mediaTypes).map((m) => (
@@ -663,20 +717,22 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
           </Space>
         )}
         <Space wrap size={16}>
-          <Space size={6}>
-            <Text type="secondary">质量</Text>
-            <Segmented
-              size="small"
-              value={quality}
-              onChange={(v) => setQuality(v as "high" | "medium" | "low")}
-              disabled={running}
-              options={[
-                { value: "high", label: "高" },
-                { value: "medium", label: "中" },
-                { value: "low", label: "低" },
-              ]}
-            />
-          </Space>
+          {(mediaTypes.has("image") || mediaTypes.has("video")) && (
+            <Space size={6}>
+              <Text type="secondary">质量</Text>
+              <Segmented
+                size="small"
+                value={quality}
+                onChange={(v) => setQuality(v as "high" | "medium" | "low")}
+                disabled={running}
+                options={[
+                  { value: "high", label: "高" },
+                  { value: "medium", label: "中" },
+                  { value: "low", label: "低" },
+                ]}
+              />
+            </Space>
+          )}
           {mediaTypes.has("audio") && (
             <Space size={6}>
               <Text type="secondary">音频码率</Text>
@@ -706,7 +762,11 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
               ]}
             />
             {outputMode === "custom" && (
-              <Button size="small" icon={<FolderOpenOutlined />} onClick={() => void chooseOutputDir()}>
+              <Button
+                size="small"
+                icon={<FolderOpenOutlined />}
+                onClick={() => void chooseOutputDir()}
+              >
                 {outputDir || "选择目录"}
               </Button>
             )}
@@ -714,7 +774,15 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
         </Space>
       </Space>
 
-      <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <div
+        style={{
+          marginTop: 16,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
         {running ? (
           <>
             <Button danger loading onClick={() => void cancelConvert()}>
@@ -742,22 +810,28 @@ const ConvertTool: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
             >
               开始转换{queuedCount > 0 ? `（${queuedCount}）` : ""}
             </Button>
-            {!running && state.total > 0 && (state.done > 0 || state.failed > 0) && (
-              <>
-                <Text>
-                  上次结果：<Text type="success">成功 {state.done}</Text>
-                  {state.failed > 0 && <Text type="danger"> · 失败 {state.failed}</Text>}
-                  {state.skipped > 0 && <Text type="secondary"> · 跳过 {state.skipped}</Text>}
-                </Text>
-                <Button
-                  size="small"
-                  icon={<FolderOpenOutlined />}
-                  onClick={() => void openOutput(null)}
-                >
-                  打开输出目录
-                </Button>
-              </>
-            )}
+            {!running &&
+              state.total > 0 &&
+              (state.done > 0 || state.failed > 0) && (
+                <>
+                  <Text>
+                    上次结果：<Text type="success">成功 {state.done}</Text>
+                    {state.failed > 0 && (
+                      <Text type="danger"> · 失败 {state.failed}</Text>
+                    )}
+                    {state.skipped > 0 && (
+                      <Text type="secondary"> · 跳过 {state.skipped}</Text>
+                    )}
+                  </Text>
+                  <Button
+                    size="small"
+                    icon={<FolderOpenOutlined />}
+                    onClick={() => void openOutput(null)}
+                  >
+                    打开输出目录
+                  </Button>
+                </>
+              )}
           </>
         )}
       </div>

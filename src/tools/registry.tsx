@@ -471,7 +471,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "media-convert",
     title: "格式转换",
-    desc: "批量转换图片 / 视频 / 音频格式（宿主 ffmpeg）",
+    desc: "批量转换图片 / 视频 / 音频格式，Word / PPT 转 PDF",
     icon: FileSyncOutlined,
     category: "文件",
     component: ConvertTool,

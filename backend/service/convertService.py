@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-媒体格式转换（批量）：图片 / 视频 / 音频。
+媒体格式转换（批量）：图片 / 视频 / 音频 / Office 文档（Word、PPT 转 PDF）。
 
 架构：宿主只提供 ffmpeg / ffprobe 可执行文件地址（hostCall ffmpeg.getPaths，
 无窗口依赖），本服务拿到地址后完全自主处理 ——
     - 文件/目录选择：backend 进程内 tkinter 原生对话框（截图工具同方案）
     - 元信息探测：直接 subprocess ffprobe
-    - 转码：直接 subprocess ffmpeg，-progress pipe:1 实时解析进度
+    - 图片/视频/音频转码：直接 subprocess ffmpeg，-progress pipe:1 实时解析进度
+    - Word/PPT 转 PDF：PowerShell + COM 自动化（Microsoft Office 优先，WPS 兜底）
     - 取消：terminate 本地转码子进程
     - 打开输出：os.startfile / explorer 定位
 
@@ -51,12 +52,16 @@ _AUDIO_EXTS = {
     "mp3", "wav", "aac", "flac", "ogg", "oga", "m4a", "wma", "aiff", "aif",
     "opus", "amr", "ape",
 }
+_WORD_EXTS = {"doc", "docx"}
+_PPT_EXTS = {"ppt", "pptx"}
+_DOCUMENT_EXTS = _WORD_EXTS | _PPT_EXTS
 
 # 可选的目标输出格式（白名单，前端下拉与之保持一致）
 OUTPUT_FORMATS: Dict[str, List[str]] = {
     "image": ["png", "jpg", "webp", "bmp", "gif", "tiff"],
     "video": ["mp4", "mkv", "mov", "avi", "webm", "ts"],
     "audio": ["mp3", "wav", "aac", "flac", "ogg", "m4a", "opus", "wma"],
+    "document": ["pdf"],
 }
 
 # 图片质量：JPG -q:v（2 最佳 ~ 5 一般）；WEBP -quality
@@ -94,7 +99,7 @@ _AUDIO_PRESETS = {
 }
 _AUDIO_BITRATES = ["96k", "128k", "192k", "320k"]
 
-_ALL_MEDIA_EXTS = sorted(_IMAGE_EXTS | _VIDEO_EXTS | _AUDIO_EXTS)
+_ALL_MEDIA_EXTS = sorted(_IMAGE_EXTS | _VIDEO_EXTS | _AUDIO_EXTS | _DOCUMENT_EXTS)
 
 # ----------------------- 运行时状态 -----------------------
 
@@ -181,10 +186,11 @@ def _pick_files_dialog() -> List[str]:
 
     patterns = " ".join(f"*.{e}" for e in _ALL_MEDIA_EXTS)
     filetypes = [
-        ("媒体文件（图片/视频/音频）", patterns),
+        ("媒体文件（图片/视频/音频/文档）", patterns),
         ("图片", " ".join(f"*.{e}" for e in sorted(_IMAGE_EXTS))),
         ("视频", " ".join(f"*.{e}" for e in sorted(_VIDEO_EXTS))),
         ("音频", " ".join(f"*.{e}" for e in sorted(_AUDIO_EXTS))),
+        ("Office 文档", " ".join(f"*.{e}" for e in sorted(_DOCUMENT_EXTS))),
         ("所有文件", "*.*"),
     ]
 
@@ -259,6 +265,8 @@ def _classify_media(ext: str) -> Optional[str]:
         return "video"
     if ext in _AUDIO_EXTS:
         return "audio"
+    if ext in _DOCUMENT_EXTS:
+        return "document"
     return None
 
 
@@ -337,6 +345,90 @@ def _add_paths(paths: List[str]) -> Dict[str, Any]:
     return {"items": added, "skipped": skipped}
 
 
+# ----------------------- Word / PPT 转 PDF（PowerShell + COM） -----------------------
+# 零 Python 依赖：调用系统自带 PowerShell 驱动 Office COM（Microsoft Office 优先，
+# WPS 的 KWPS/KWPP 兜底 —— 国内环境常见）。路径以单引号字面量注入（' 翻倍转义）。
+# Word: Documents.Open(ReadOnly) + ExportAsFixedFormat(17 = wdExportFormatPDF)
+# PPT:  Presentations.Open(ReadOnly, 无窗口) + ExportAsFixedFormat(2 = ppFixedFormatPDF)，
+#       旧组件兜底 SaveAs(32 = ppSaveAsPDF)
+
+_PS_WORD_TMPL = r"""
+$ErrorActionPreference = 'Stop'
+$app = $null
+foreach ($p in @('Word.Application', 'KWPS.Application')) {
+  try { $app = New-Object -ComObject $p; break } catch { }
+}
+if (-not $app) { [Console]::Error.WriteLine('NO_OFFICE'); exit 2 }
+try {
+  $app.Visible = $false
+  try { $app.DisplayAlerts = 0 } catch { }
+  $doc = $app.Documents.Open(__INPUT__, $false, $true)
+  $doc.ExportAsFixedFormat(__OUTPUT__, 17)
+  $doc.Close(0)
+} finally {
+  try { $app.Quit() } catch { }
+}
+"""
+
+_PS_PPT_TMPL = r"""
+$ErrorActionPreference = 'Stop'
+$app = $null
+foreach ($p in @('PowerPoint.Application', 'KWPP.Application')) {
+  try { $app = New-Object -ComObject $p; break } catch { }
+}
+if (-not $app) { [Console]::Error.WriteLine('NO_OFFICE'); exit 2 }
+try {
+  try { $app.DisplayAlerts = 1 } catch { }
+  $pres = $app.Presentations.Open(__INPUT__, $true, $false, $false)
+  try { $pres.ExportAsFixedFormat(__OUTPUT__, 2) } catch { $pres.SaveAs(__OUTPUT__, 32) }
+  $pres.Close()
+} finally {
+  try { $app.Quit() } catch { }
+}
+"""
+
+_DOC_TIMEOUT_S = 600  # 大型 PPT 经 COM 转换可能较慢
+
+
+def _ps_quote(s: str) -> str:
+    """转义为 PowerShell 单引号字符串字面量。"""
+    return "'" + str(s).replace("'", "''") + "'"
+
+
+def _run_powershell(script: str, timeout: int = _DOC_TIMEOUT_S) -> subprocess.CompletedProcess:
+    """以 -EncodedCommand 运行 PowerShell（UTF-16LE base64，避免临时文件与转义问题）。"""
+    import base64
+
+    encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+    cmd = [
+        "powershell", "-NoProfile", "-NonInteractive",
+        "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded,
+    ]
+    return subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", timeout=timeout, creationflags=_CREATE_NO_WINDOW,
+    )
+
+
+def _convert_document_one(item: Dict[str, Any], output_dir: Optional[str]) -> None:
+    """Office 文档 → PDF：COM 自动化（阻塞至完成，无进度回调）。"""
+    out_dir = output_dir or os.path.dirname(item["path"])
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = _unique_output(out_dir, os.path.splitext(item["name"])[0], "pdf")
+    item["target"] = "pdf"
+    tmpl = _PS_WORD_TMPL if item["ext"] in _WORD_EXTS else _PS_PPT_TMPL
+    script = tmpl.replace("__INPUT__", _ps_quote(item["path"])).replace(
+        "__OUTPUT__", _ps_quote(out_path))
+    proc = _run_powershell(script)
+    if proc.returncode != 0 or not os.path.isfile(out_path):
+        err = (proc.stderr or "").strip()
+        if "NO_OFFICE" in err:
+            raise RuntimeError("未检测到 Microsoft Office 或 WPS，无法转换 Office 文档")
+        raise RuntimeError(err[-500:] or f"转换失败（退出码 {proc.returncode}）")
+    item["outputPath"] = out_path
+    item["outputSize"] = os.path.getsize(out_path)
+
+
 # ----------------------- 转码参数与输出 -----------------------
 
 def _unique_output(out_dir: str, stem: str, ext: str) -> str:
@@ -405,7 +497,16 @@ def _read_progress_line(line: str, item: Dict[str, Any]) -> None:
 
 def _convert_one(ffmpeg: str, item: Dict[str, Any], target: str,
                  options: Dict[str, Any], output_dir: Optional[str]) -> None:
-    """转码单个文件（阻塞至完成），实时更新 item 进度，可被 cancel terminate。"""
+    """转码单个文件（阻塞至完成），实时更新 item 进度，可被 cancel terminate。
+
+    Office 文档（Word/PPT → PDF）走 PowerShell COM 分支，无进度回调，秒级~分钟级。
+    """
+    if item["mediaType"] == "document":
+        _convert_document_one(item, output_dir)
+        item["status"] = "done"
+        item["percent"] = 100
+        return
+
     out_dir = output_dir or os.path.dirname(item["path"])
     stem = os.path.splitext(item["name"])[0]
     out_path = _unique_output(out_dir, stem, target)
@@ -494,7 +595,8 @@ def _run_batch(ids: List[str], targets: Dict[str, str],
             it["status"] = "converting"
             it["startedAt"] = time.time()
 
-        if not ffmpeg or not os.path.isfile(str(ffmpeg)):
+        # 文档转 PDF 走 Office COM，不依赖 ffmpeg
+        if it["mediaType"] != "document" and (not ffmpeg or not os.path.isfile(str(ffmpeg))):
             it["status"] = "failed"
             it["error"] = "宿主 ffmpeg 不可用"
             continue
