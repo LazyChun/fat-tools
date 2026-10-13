@@ -48,6 +48,7 @@ import {
   ReadOutlined,
   RobotOutlined,
   TableOutlined,
+  CameraOutlined,
   SnippetsOutlined,
   SmileOutlined,
 } from "@ant-design/icons";
@@ -97,6 +98,7 @@ import NavTool from "./NavTool";
 import GridSplitTool from "./GridSplitTool";
 import GridMergeTool from "./GridMergeTool";
 import MemeTool from "./MemeTool";
+import ScreenshotTool from "./ScreenshotTool";
 
 export type ToolCategory =
   | "文本"
@@ -455,6 +457,14 @@ export const TOOLS: ToolDef[] = [
     icon: SnippetsOutlined,
     category: "文件",
     component: GridMergeTool,
+  },
+  {
+    id: "screenshot",
+    title: "屏幕截图",
+    desc: "截取整个屏幕 / 窗口 / 标签页为 PNG，复制或下载",
+    icon: CameraOutlined,
+    category: "文件",
+    component: ScreenshotTool,
   },
   {
     id: "xml",

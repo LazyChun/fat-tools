@@ -56,7 +56,7 @@ If names don't match you will see:
 - `types/fat-notes-sdk.d.ts` — SDK type declarations (mirror of host).
 - `webpack.config.js` — Module Federation build (`exposes ./plugin`).
 
-## 内置工具（46 个，纯前端实现）
+## 内置工具（47 个，纯前端实现）
 
 菜单按分类展示，点击卡片 → `sdk.router.navigate("/tools/<toolId>")`。
 
@@ -70,7 +70,7 @@ If names don't match you will see:
 | 生成 | 密码生成器、条形码生成、随机字符生成、转盘抽签、智能取名 |
 | 时间 | 秒表 / 倒计时、时间计算器、假期日历、农历转换 |
 | 生活 | 亲友关系图谱、血型图谱、星座罗盘、易经算命、网站导航 |
-| 文件 | PDF 合并、PDF 分割、格子拆图、格子合图 |
+| 文件 | PDF 合并、PDF 分割、格子拆图、格子合图、屏幕截图 |
 | 记录 | 待办清单、操作记录 |
 
 > 新增工具只需在 `src/tools/registry.tsx` 加一条记录（`ToolCategory` 已支持上表分类），
