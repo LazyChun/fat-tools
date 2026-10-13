@@ -29,6 +29,17 @@ import {
 import { CopyButton, StatRow, ToolShell } from "../components/Common";
 import ToolHistoryPanel from "../components/ToolHistory";
 import { recordUsage, suppressNextRecord } from "../historyClient";
+import { createToolSearchFeed } from "./searchFeed";
+import { CALCULATOR_SEARCH_FEED } from "./CalculatorTool";
+
+// 科学计算器的全局搜索直达：算式形态与计算器一致（复用其正则源，
+// 计算器侧调整自动跟随；其函数调用分支为前缀匹配，勿在外层加 $），
+// 另支持 "1, 2, 3" 逗号分隔数字列表（统计模式，自带首尾锚定）
+export const SCI_CALC_SEARCH_FEED = createToolSearchFeed(
+  new RegExp(
+    `(?:${CALCULATOR_SEARCH_FEED.pattern.source}|^\\d+(?:\\.\\d+)?(?:\\s*,\\s*\\d+(?:\\.\\d+)?){2,}$)`,
+  ),
+);
 
 const { Text } = Typography;
 
@@ -124,16 +135,33 @@ const SciCalcTool: React.FC<Props> = ({ onBack }) => {
   const [statsInput, setStatsInput] = useState("1, 2, 3, 4, 5, 6, 7, 8, 9, 10");
   const [mem, setMem] = useState<number | null>(null);
 
+  // 全局搜索直达：算式填入表达式框，逗号分隔数字列表填入统计输入并切换统计模式
+  const feedSciCalc = useCallback((value: string) => {
+    if (/^\d+(?:\.\d+)?(?:\s*,\s*\d+(?:\.\d+)?)+$/.test(value.trim())) {
+      setMode("stats");
+      setStatsInput(value);
+    } else {
+      setMode("calc");
+      setExpr(value);
+    }
+  }, []);
+  SCI_CALC_SEARCH_FEED.useFeedValue(feedSciCalc);
+
   const compute = useCallback(
     (input?: string) => {
       const source = (input ?? expr).trim();
       if (!source) return;
       try {
-        const value = evaluateExpression(source, { angleMode, memory: mem ?? undefined });
+        const value = evaluateExpression(source, {
+          angleMode,
+          memory: mem ?? undefined,
+        });
         const formatted = formatNumber(value);
         setResult(formatted);
         setError("");
-        setHistory((h) => [{ expr: source, result: formatted }, ...h].slice(0, 30));
+        setHistory((h) =>
+          [{ expr: source, result: formatted }, ...h].slice(0, 30),
+        );
         recordUsage({
           toolId: "scicalc",
           toolTitle: "科学计算器",
@@ -164,7 +192,10 @@ const SciCalcTool: React.FC<Props> = ({ onBack }) => {
   };
 
   // 键盘输入支持回车即时计算
-  const stats = useMemo(() => summarizeNumbers(parseNumberList(statsInput)), [statsInput]);
+  const stats = useMemo(
+    () => summarizeNumbers(parseNumberList(statsInput)),
+    [statsInput],
+  );
 
   return (
     <ToolShell
@@ -218,7 +249,9 @@ const SciCalcTool: React.FC<Props> = ({ onBack }) => {
               minHeight: 44,
               padding: "8px 14px",
               borderRadius: 8,
-              background: result ? "rgba(22,119,255,0.08)" : "rgba(128,128,128,0.06)",
+              background: result
+                ? "rgba(22,119,255,0.08)"
+                : "rgba(128,128,128,0.06)",
               marginBottom: 10,
               flexWrap: "wrap",
             }}
@@ -226,7 +259,14 @@ const SciCalcTool: React.FC<Props> = ({ onBack }) => {
             <Text type="secondary" style={{ fontSize: 12 }}>
               结果
             </Text>
-            <Text strong style={{ fontSize: 22, fontFamily: "monospace", wordBreak: "break-all" }}>
+            <Text
+              strong
+              style={{
+                fontSize: 22,
+                fontFamily: "monospace",
+                wordBreak: "break-all",
+              }}
+            >
               {result || "—"}
             </Text>
             {result ? <CopyButton text={result} label="复制" /> : null}
@@ -258,11 +298,24 @@ const SciCalcTool: React.FC<Props> = ({ onBack }) => {
             </div>
           ) : null}
 
-          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+          <div
+            style={{
+              display: "grid",
+              gap: 10,
+              gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+            }}
+          >
             <Card size="small" title="数字键盘">
               <div style={{ display: "grid", gap: 4 }}>
                 {BASIC_KEYS.map((row, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
+                  <div
+                    key={i}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(5, 1fr)",
+                      gap: 4,
+                    }}
+                  >
                     {row.map((k) => (
                       <Tooltip key={k.label} title={k.tip}>
                         <Button
@@ -283,10 +336,21 @@ const SciCalcTool: React.FC<Props> = ({ onBack }) => {
             <Card size="small" title="科学函数">
               <div style={{ display: "grid", gap: 4 }}>
                 {SCI_KEYS.map((row, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 4 }}>
+                  <div
+                    key={i}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(6, 1fr)",
+                      gap: 4,
+                    }}
+                  >
                     {row.map((k) => (
                       <Tooltip key={k.label} title={k.tip}>
-                        <Button size="small" onClick={() => press(k)} style={{ fontFamily: "monospace", padding: "0 4px" }}>
+                        <Button
+                          size="small"
+                          onClick={() => press(k)}
+                          style={{ fontFamily: "monospace", padding: "0 4px" }}
+                        >
                           {k.label}
                         </Button>
                       </Tooltip>
@@ -299,8 +363,12 @@ const SciCalcTool: React.FC<Props> = ({ onBack }) => {
 
           <div style={{ marginTop: 10 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              支持：+ - * / % ^ 括号、隐式乘法（2pi）、常量 pi / e，以及全部科学函数。
-              当前为{angleMode === "rad" ? "弧度制（三角函数的输入输出按弧度）" : "角度制（三角函数的输入按角度）"}。
+              支持：+ - * / % ^ 括号、隐式乘法（2pi）、常量 pi /
+              e，以及全部科学函数。 当前为
+              {angleMode === "rad"
+                ? "弧度制（三角函数的输入输出按弧度）"
+                : "角度制（三角函数的输入按角度）"}
+              。
             </Text>
           </div>
 
@@ -310,7 +378,12 @@ const SciCalcTool: React.FC<Props> = ({ onBack }) => {
                 {history.map((h, i) => (
                   <div
                     key={i}
-                    style={{ fontFamily: "monospace", fontSize: 12, padding: "3px 0", cursor: "pointer" }}
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: 12,
+                      padding: "3px 0",
+                      cursor: "pointer",
+                    }}
                     onClick={() => setExpr(h.expr)}
                     title="点击回填表达式"
                   >
@@ -322,15 +395,17 @@ const SciCalcTool: React.FC<Props> = ({ onBack }) => {
           ) : null}
         </>
       ) : (
-        <StatsPanel
-          input={statsInput}
-          onChange={setStatsInput}
-          stats={stats}
-        />
+        <StatsPanel input={statsInput} onChange={setStatsInput} stats={stats} />
       )}
 
       <Card size="small" title="函数速查" style={{ marginTop: 12 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 4 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
+            gap: 4,
+          }}
+        >
           {SCI_FUNCTIONS.map((f) => (
             <div key={f.name} style={{ display: "flex", gap: 6, fontSize: 12 }}>
               <Text code style={{ fontSize: 12 }}>
@@ -360,7 +435,8 @@ const SciCalcTool: React.FC<Props> = ({ onBack }) => {
         onRestore={(d) => {
           suppressNextRecord("scicalc");
           if (typeof d.input === "string") setExpr(d.input);
-          if (d.angleMode === "deg" || d.angleMode === "rad") setAngleMode(d.angleMode);
+          if (d.angleMode === "deg" || d.angleMode === "rad")
+            setAngleMode(d.angleMode);
         }}
       />
     </ToolShell>
@@ -382,16 +458,34 @@ const StatsPanel: React.FC<{
       style={{ fontFamily: "monospace", marginBottom: 10 }}
     />
     {stats ? (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 6 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+          gap: 6,
+        }}
+      >
         <StatRow label="个数" value={stats.count} />
         <StatRow label="求和" value={formatNumber(stats.sum)} copyable />
         <StatRow label="平均值" value={formatNumber(stats.mean)} copyable />
         <StatRow label="中位数" value={formatNumber(stats.median)} copyable />
         <StatRow label="最小值" value={formatNumber(stats.min)} />
         <StatRow label="最大值" value={formatNumber(stats.max)} />
-        <StatRow label="样本标准差" value={formatNumber(stats.stddev)} copyable />
-        <StatRow label="总体标准差" value={formatNumber(stats.stddevP)} copyable />
-        <StatRow label="样本方差" value={formatNumber(stats.variance)} copyable />
+        <StatRow
+          label="样本标准差"
+          value={formatNumber(stats.stddev)}
+          copyable
+        />
+        <StatRow
+          label="总体标准差"
+          value={formatNumber(stats.stddevP)}
+          copyable
+        />
+        <StatRow
+          label="样本方差"
+          value={formatNumber(stats.variance)}
+          copyable
+        />
       </div>
     ) : (
       <Text type="secondary">请输入至少一个有效数字</Text>

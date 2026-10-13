@@ -31,6 +31,7 @@ import type { Disposable, FatNotesPluginSDK } from "fat-notes-sdk";
 import MenuView from "./MenuView";
 import WorkPageView from "./WorkPageView";
 import CalculatorTool, { CALCULATOR_SEARCH_FEED } from "./tools/CalculatorTool";
+import { SCI_CALC_SEARCH_FEED } from "./tools/SciCalcTool";
 import { BASE64_SEARCH_FEED, URL_SEARCH_FEED } from "./tools/EncodeTool";
 import { RADIX_SEARCH_FEED } from "./tools/RadixTool";
 import { TIMESTAMP_SEARCH_FEED } from "./tools/TimestampTool";
@@ -59,6 +60,7 @@ const disposables: Disposable[] = [];
  */
 const TOOL_SEARCH_FEEDS: Record<string, ToolSearchFeed> = {
   calculator: CALCULATOR_SEARCH_FEED,
+  scicalc: SCI_CALC_SEARCH_FEED,
   radix: RADIX_SEARCH_FEED,
   timestamp: TIMESTAMP_SEARCH_FEED,
   timecalc: TIMECALC_SEARCH_FEED,
