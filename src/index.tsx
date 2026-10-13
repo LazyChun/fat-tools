@@ -30,7 +30,18 @@ import React from "react";
 import type { Disposable, FatNotesPluginSDK } from "fat-notes-sdk";
 import MenuView from "./MenuView";
 import WorkPageView from "./WorkPageView";
-import CalculatorTool from "./tools/CalculatorTool";
+import CalculatorTool, { CALCULATOR_SEARCH_FEED } from "./tools/CalculatorTool";
+import { BASE64_SEARCH_FEED, URL_SEARCH_FEED } from "./tools/EncodeTool";
+import { RADIX_SEARCH_FEED } from "./tools/RadixTool";
+import { TIMESTAMP_SEARCH_FEED } from "./tools/TimestampTool";
+import { TIMECALC_SEARCH_FEED } from "./tools/TimeCalcTool";
+import { COLOR_SEARCH_FEED } from "./tools/ColorTool";
+import { URL_PARSE_SEARCH_FEED } from "./tools/UrlParseTool";
+import { JWT_SEARCH_FEED } from "./tools/JwtTool";
+import { MORSE_SEARCH_FEED } from "./tools/MorseTool";
+import { JSON_SEARCH_FEED } from "./tools/JsonTool";
+import { REGEX_SEARCH_FEED } from "./tools/RegexTool";
+import type { ToolSearchFeed } from "./tools/searchFeed";
 import { TOOLS } from "./tools/registry";
 import { ROUTE_PREFIX, getDefaultRoute, toolIdToPath } from "./routes";
 import { getPreferredToolId, setPreferredToolId } from "./preferences";
@@ -41,6 +52,25 @@ import ToolSwitcherBlock from "./tools/ToolSwitcherBlock";
 import ToolSwitcherDisplayConfig from "./tools/ToolSwitcherDisplayConfig";
 
 const disposables: Disposable[] = [];
+
+/**
+ * 「全局搜索输入直达」喂入器表：命中工具的输入内容模式时（inputPattern），
+ * 全局搜索结果出现该工具，点击直达并把触发文本自动填入输入框。
+ */
+const TOOL_SEARCH_FEEDS: Record<string, ToolSearchFeed> = {
+  calculator: CALCULATOR_SEARCH_FEED,
+  radix: RADIX_SEARCH_FEED,
+  timestamp: TIMESTAMP_SEARCH_FEED,
+  timecalc: TIMECALC_SEARCH_FEED,
+  color: COLOR_SEARCH_FEED,
+  "url-parse": URL_PARSE_SEARCH_FEED,
+  url: URL_SEARCH_FEED,
+  base64: BASE64_SEARCH_FEED,
+  jwt: JWT_SEARCH_FEED,
+  morse: MORSE_SEARCH_FEED,
+  json: JSON_SEARCH_FEED,
+  regex: REGEX_SEARCH_FEED,
+};
 
 /** 活动栏项 id —— 必须与工作台页 id 完全一致，宿主据此绑定右侧工作区 */
 const ACTIVITY_ID = "fat-tools.main";
@@ -123,33 +153,48 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
     }),
   );
 
-  // 5.5 全局搜索注册：每个工具注册为一个搜索项（匹配文本 / 图标 / 点击直达）
+  // 5.5 全局搜索注册：每个工具注册为一个搜索项（匹配文本 / 图标 / 点击直达）。
+  //     部分工具额外注册输入内容模式（inputPattern，见 TOOL_SEARCH_FEEDS）：
+  //     全局搜索输入算式 / 时间戳 / 颜色值 / URL / 编码串等即可命中对应工具，
+  //     点击后自动填入输入框。
   safeRegister("searchProvider", () =>
     sdk.contributions.registerSearchProvider({
       id: "fat-tools.search",
       name: "fat-tools 工具箱",
-      items: TOOLS.map((tool) => ({
-        id: tool.id,
-        title: tool.title,
-        desc: tool.desc,
-        icon: tool.icon,
+      items: TOOLS.map((tool) => {
+        const path = toolIdToPath(tool.id);
+        const openTool = () => {
+          setPreferredToolId(tool.id);
+          if (path) sdk.router.navigate(path);
+        };
         // 关键词：工具 id、中文分类、id 拆词与连写（"text-diff" → text / diff / "text diff"）
-        keywords: Array.from(
+        const keywords = Array.from(
           new Set([
             tool.id,
             tool.category,
             ...tool.id.split("-"),
             tool.id.split("-").join(" "),
           ]),
-        ),
-        tag: "工具",
-        activityId: ACTIVITY_ID,
-        onSelect: () => {
-          setPreferredToolId(tool.id);
-          const path = toolIdToPath(tool.id);
-          if (path) sdk.router.navigate(path);
-        },
-      })),
+        );
+        // 输入直达：命中输入模式时，点击后把触发文本自动填入输入框
+        const searchFeed = TOOL_SEARCH_FEEDS[tool.id];
+        return {
+          id: tool.id,
+          title: tool.title,
+          desc: tool.desc,
+          icon: tool.icon,
+          keywords,
+          tag: "工具",
+          inputPattern: searchFeed?.pattern,
+          activityId: ACTIVITY_ID,
+          onSelect: (query?: string) => {
+            openTool();
+            if (query && searchFeed) {
+              searchFeed.feed(query);
+            }
+          },
+        };
+      }),
     }),
   );
 

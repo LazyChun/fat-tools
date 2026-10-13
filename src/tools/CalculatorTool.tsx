@@ -9,8 +9,19 @@ import { Button, Input, Radio, Space, Tag, Typography } from "antd";
 import { evaluateExpression } from "../utils";
 import { StatRow, ToolShell } from "../components/Common";
 import { listHistory, recordUsage } from "../historyClient";
+import { createToolSearchFeed } from "./searchFeed";
 
 const { Text } = Typography;
+
+/**
+ * 计算器的全局搜索直达喂入器：搜索命中算式即可直达并自动填入。
+ * 匹配"数字/括号开头且含运算符"的完整算式（1+1、(1+2)*3、2^10），
+ * 或函数调用形式（sqrt(16)、sin(pi/2)）；纯数字/纯单词/日期文本不命中
+ * （日期样文本如 2026-10-13 由负向断言排除，交给时间类工具）。
+ */
+export const CALCULATOR_SEARCH_FEED = createToolSearchFeed(
+  /^\s*(?!\d{4}[-/.]\d{1,2}[-/.]\d{1,2})(?:[\d(][\d+\-*/%^().\s]*[+\-*/%^][\d+\-*/%^().\s]*\s*$|[a-z][a-z0-9]*\s*\()/,
+);
 
 interface Props {
   onBack?: () => void;
@@ -39,6 +50,9 @@ const CalculatorTool: React.FC<Props> = ({ onBack, compact }) => {
   const [error, setError] = useState("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
+  // 全局搜索直达：挂载时登记输入 setter，并消费暂存的待填入表达式
+  CALCULATOR_SEARCH_FEED.useFeedValue(setExpr);
+
   // 进入工具时回读落库的历史（最近 20 条）
   useEffect(() => {
     if (compact) return;
@@ -46,9 +60,16 @@ const CalculatorTool: React.FC<Props> = ({ onBack, compact }) => {
       .then((r) => {
         const items: HistoryItem[] = [];
         for (const rec of r.items) {
-          const input = String((rec.detail as { input?: unknown })?.input ?? "");
-          const res = String((rec.detail as { result?: unknown })?.result ?? "");
-          const mode = (rec.detail as { angleMode?: unknown })?.angleMode === "deg" ? "deg" : "rad";
+          const input = String(
+            (rec.detail as { input?: unknown })?.input ?? "",
+          );
+          const res = String(
+            (rec.detail as { result?: unknown })?.result ?? "",
+          );
+          const mode =
+            (rec.detail as { angleMode?: unknown })?.angleMode === "deg"
+              ? "deg"
+              : "rad";
           if (input) items.push({ expr: input, result: res, angleMode: mode });
         }
         setHistory(items);
@@ -67,7 +88,9 @@ const CalculatorTool: React.FC<Props> = ({ onBack, compact }) => {
           : String(Number(value.toPrecision(12)));
         setResult(formatted);
         setError("");
-        setHistory((h) => [{ expr: source, result: formatted, angleMode }, ...h].slice(0, 20));
+        setHistory((h) =>
+          [{ expr: source, result: formatted, angleMode }, ...h].slice(0, 20),
+        );
         recordUsage({
           toolId: "calculator",
           toolTitle: "计算器",
@@ -117,7 +140,8 @@ const CalculatorTool: React.FC<Props> = ({ onBack, compact }) => {
             ]}
           />
           <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-            支持 + - * / % ^ 括号、sqrt/abs/sin/cos/tan/ln/log/round/floor/ceil/min/max/pow、pi/e、隐式乘法（2pi）
+            支持 + - * / % ^
+            括号、sqrt/abs/sin/cos/tan/ln/log/round/floor/ceil/min/max/pow、pi/e、隐式乘法（2pi）
           </Text>
         </div>
       ) : null}
@@ -127,20 +151,46 @@ const CalculatorTool: React.FC<Props> = ({ onBack, compact }) => {
           <StatRow label="结果" value={result} copyable />
         </div>
       ) : null}
-      {error ? <Tag color="error" style={{ marginBottom: 8 }}>{error}</Tag> : null}
+      {error ? (
+        <Tag color="error" style={{ marginBottom: 8 }}>
+          {error}
+        </Tag>
+      ) : null}
 
       <div style={{ display: "grid", gap: 4, maxWidth: 360 }}>
         {KEYS.map((row, i) => (
-          <div key={i} style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
+          <div
+            key={i}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, 1fr)",
+              gap: 4,
+            }}
+          >
             {row.map((key) => (
-              <Button key={key} size="small" onClick={() => press(key)} style={{ fontFamily: "monospace" }}>
+              <Button
+                key={key}
+                size="small"
+                onClick={() => press(key)}
+                style={{ fontFamily: "monospace" }}
+              >
                 {key.replace("(", "")}
               </Button>
             ))}
           </div>
         ))}
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 4 }}>
-          <Button danger size="small" onClick={() => { setExpr(""); setResult(""); setError(""); }}>
+        <div
+          style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 4 }}
+        >
+          <Button
+            danger
+            size="small"
+            onClick={() => {
+              setExpr("");
+              setResult("");
+              setError("");
+            }}
+          >
             清空
           </Button>
           <Button size="small" onClick={() => setExpr((v) => v.slice(0, -1))}>
@@ -151,7 +201,9 @@ const CalculatorTool: React.FC<Props> = ({ onBack, compact }) => {
 
       {!compact && history.length > 0 ? (
         <div style={{ marginTop: 12 }}>
-          <Text type="secondary">历史记录（已落库，最近 {history.length} 条）</Text>
+          <Text type="secondary">
+            历史记录（已落库，最近 {history.length} 条）
+          </Text>
           <div style={{ marginTop: 4, maxHeight: 160, overflow: "auto" }}>
             {history.map((h, i) => (
               <div
@@ -178,7 +230,11 @@ const CalculatorTool: React.FC<Props> = ({ onBack, compact }) => {
   );
 
   if (compact) return <div style={{ padding: 8 }}>{body}</div>;
-  return <ToolShell title="计算器" onBack={onBack}>{body}</ToolShell>;
+  return (
+    <ToolShell title="计算器" onBack={onBack}>
+      {body}
+    </ToolShell>
+  );
 };
 
 export default CalculatorTool;

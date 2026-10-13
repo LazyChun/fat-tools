@@ -6,8 +6,12 @@ import { Input, Table, Typography } from "antd";
 import { CopyButton, StatRow, ToolShell } from "../components/Common";
 import ToolHistoryPanel from "../components/ToolHistory";
 import { recordUsageDebounced, suppressNextRecord } from "../historyClient";
+import { createToolSearchFeed } from "./searchFeed";
 
 const { Text } = Typography;
+
+// URL 解析的全局搜索直达：匹配 http/https 开头的完整 URL
+export const URL_PARSE_SEARCH_FEED = createToolSearchFeed(/^https?:\/\/\S+$/);
 
 interface Props {
   onBack?: () => void;
@@ -73,7 +77,13 @@ function parseUrl(input: string): Parsed {
 }
 
 const UrlParseTool: React.FC<Props> = ({ onBack }) => {
-  const [input, setInput] = useState("https://example.com:8443/a/b?name=%E5%BC%A0%E4%B8%89&age=20#top");
+  const [input, setInput] = useState(
+    "https://example.com:8443/a/b?name=%E5%BC%A0%E4%B8%89&age=20#top",
+  );
+
+  // 全局搜索直达：命中输入模式后自动填入
+  URL_PARSE_SEARCH_FEED.useFeedValue(setInput);
+
   const parsed = useMemo(() => parseUrl(input), [input]);
 
   React.useEffect(() => {
@@ -122,7 +132,11 @@ const UrlParseTool: React.FC<Props> = ({ onBack }) => {
             <StatRow label="域名" value={parsed.hostname} copyable />
             <StatRow label="端口" value={parsed.port} copyable />
             <StatRow label="路径" value={parsed.pathname} copyable />
-            <StatRow label="Hash" value={parsed.hash || "—"} copyable={!!parsed.hash} />
+            <StatRow
+              label="Hash"
+              value={parsed.hash || "—"}
+              copyable={!!parsed.hash}
+            />
             <StatRow label="Origin" value={parsed.origin} copyable />
           </div>
 
@@ -147,7 +161,9 @@ const UrlParseTool: React.FC<Props> = ({ onBack }) => {
                 title: "值",
                 dataIndex: "value",
                 render: (v: string) => (
-                  <Text style={{ wordBreak: "break-all" }}>{v === "" ? "(空)" : v}</Text>
+                  <Text style={{ wordBreak: "break-all" }}>
+                    {v === "" ? "(空)" : v}
+                  </Text>
                 ),
               },
               {

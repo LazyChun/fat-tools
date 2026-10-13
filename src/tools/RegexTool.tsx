@@ -6,6 +6,12 @@ import { Checkbox, Input, Space, Tag, Typography } from "antd";
 import { StatRow, ToolShell } from "../components/Common";
 import ToolHistoryPanel from "../components/ToolHistory";
 import { recordUsageDebounced, suppressNextRecord } from "../historyClient";
+import { createToolSearchFeed } from "./searchFeed";
+
+// 正则测试的全局搜索直达：匹配 /pattern/flags 形式的正则字面量（flags 限合法集合，避免误吞路径）
+export const REGEX_SEARCH_FEED = createToolSearchFeed(
+  /^\/[\s\S]{2,}\/[dgimsuy]*$/,
+);
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -40,8 +46,12 @@ const RegexTool: React.FC<Props> = ({ onBack }) => {
   const [flags, setFlags] = useState<string[]>(["g"]);
   const [text, setText] = useState("");
 
+  // 全局搜索直达：命中输入模式后自动填入
+  REGEX_SEARCH_FEED.useFeedValue(setPattern);
+
   const { error, matches, segments } = useMemo(() => {
-    if (!pattern || !text) return { error: "", matches: [] as MatchInfo[], segments: null };
+    if (!pattern || !text)
+      return { error: "", matches: [] as MatchInfo[], segments: null };
     let re: RegExp;
     try {
       re = new RegExp(pattern, [...new Set(flags)].join(""));
@@ -58,9 +68,14 @@ const RegexTool: React.FC<Props> = ({ onBack }) => {
           index: m.index ?? 0,
           text: m[0],
           groups: m.slice(1).map((g) => g ?? "未匹配"),
-          named: m.groups ? Object.fromEntries(Object.entries(m.groups).map(([k, v]) => [k, v ?? "未匹配"])) : {},
+          named: m.groups
+            ? Object.fromEntries(
+                Object.entries(m.groups).map(([k, v]) => [k, v ?? "未匹配"]),
+              )
+            : {},
         });
-        if ((m.index ?? 0) > last) segs.push({ text: text.slice(last, m.index), match: false });
+        if ((m.index ?? 0) > last)
+          segs.push({ text: text.slice(last, m.index), match: false });
         segs.push({ text: m[0], match: true });
         last = (m.index ?? 0) + m[0].length;
         if (segs.length > 5000) break;
@@ -72,9 +87,14 @@ const RegexTool: React.FC<Props> = ({ onBack }) => {
           index: m.index,
           text: m[0],
           groups: m.slice(1).map((g) => g ?? "未匹配"),
-          named: m.groups ? Object.fromEntries(Object.entries(m.groups).map(([k, v]) => [k, v ?? "未匹配"])) : {},
+          named: m.groups
+            ? Object.fromEntries(
+                Object.entries(m.groups).map(([k, v]) => [k, v ?? "未匹配"]),
+              )
+            : {},
         });
-        if (m.index > last) segs.push({ text: text.slice(last, m.index), match: false });
+        if (m.index > last)
+          segs.push({ text: text.slice(last, m.index), match: false });
         segs.push({ text: m[0], match: true });
         last = m.index + m[0].length;
       }
@@ -94,7 +114,13 @@ const RegexTool: React.FC<Props> = ({ onBack }) => {
               toolTitle: "正则测试",
               action: "test",
               summary: `/${pattern}/${flags.join("")} 命中 ${matches.length} 处`,
-              detail: { pattern, flags: flags.join(""), text, matchCount: matches.length, textLen: text.length },
+              detail: {
+                pattern,
+                flags: flags.join(""),
+                text,
+                matchCount: matches.length,
+                textLen: text.length,
+              },
             }
           : null,
       3000,
@@ -114,7 +140,9 @@ const RegexTool: React.FC<Props> = ({ onBack }) => {
         <Input
           addonAfter="/"
           value={flags.join("")}
-          onChange={(e) => setFlags([...e.target.value.toLowerCase().replace(/[^gimsu]/g, "")])}
+          onChange={(e) =>
+            setFlags([...e.target.value.toLowerCase().replace(/[^gimsu]/g, "")])
+          }
           style={{ width: 90, fontFamily: "monospace" }}
         />
       </Space.Compact>
@@ -124,7 +152,11 @@ const RegexTool: React.FC<Props> = ({ onBack }) => {
             key={f.key}
             checked={flags.includes(f.key)}
             onChange={(e) =>
-              setFlags((prev) => (e.target.checked ? [...prev, f.key] : prev.filter((x) => x !== f.key)))
+              setFlags((prev) =>
+                e.target.checked
+                  ? [...prev, f.key]
+                  : prev.filter((x) => x !== f.key),
+              )
             }
           >
             <Text code>{f.key}</Text> {f.desc}
@@ -164,7 +196,11 @@ const RegexTool: React.FC<Props> = ({ onBack }) => {
                 s.match ? (
                   <mark
                     key={i}
-                    style={{ background: "rgba(250,173,20,0.45)", color: "inherit", borderRadius: 2 }}
+                    style={{
+                      background: "rgba(250,173,20,0.45)",
+                      color: "inherit",
+                      borderRadius: 2,
+                    }}
                   >
                     {s.text}
                   </mark>
@@ -191,19 +227,28 @@ const RegexTool: React.FC<Props> = ({ onBack }) => {
                   <div>
                     <Tag color="blue">#{i + 1}</Tag>
                     <Text code>{JSON.stringify(m.text)}</Text>
-                    <Text type="secondary" style={{ marginLeft: 6 }}>位置 {m.index}</Text>
+                    <Text type="secondary" style={{ marginLeft: 6 }}>
+                      位置 {m.index}
+                    </Text>
                   </div>
                   {m.groups.length > 0 ? (
                     <div style={{ marginTop: 2, opacity: 0.85 }}>
-                      分组：{m.groups.map((g, gi) => (
-                        <Tag key={gi} style={{ fontFamily: "monospace" }}>${gi + 1}={JSON.stringify(g)}</Tag>
+                      分组：
+                      {m.groups.map((g, gi) => (
+                        <Tag key={gi} style={{ fontFamily: "monospace" }}>
+                          ${gi + 1}={JSON.stringify(g)}
+                        </Tag>
                       ))}
                     </div>
                   ) : null}
                   {Object.keys(m.named).length > 0 ? (
                     <div style={{ marginTop: 2, opacity: 0.85 }}>
                       {Object.entries(m.named).map(([k, v]) => (
-                        <Tag key={k} color="purple" style={{ fontFamily: "monospace" }}>
+                        <Tag
+                          key={k}
+                          color="purple"
+                          style={{ fontFamily: "monospace" }}
+                        >
                           {k}={JSON.stringify(v)}
                         </Tag>
                       ))}

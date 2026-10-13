@@ -6,6 +6,12 @@ import { Alert, Button, Input, Radio, Space, Tag } from "antd";
 import { CopyButton, ToolShell } from "../components/Common";
 import ToolHistoryPanel from "../components/ToolHistory";
 import { recordUsage } from "../historyClient";
+import { createToolSearchFeed } from "./searchFeed";
+
+// JSON 工具的全局搜索直达：匹配 { 或 [ 开头、} 或 ] 结尾且含引号/冒号/逗号的 JSON 文本
+export const JSON_SEARCH_FEED = createToolSearchFeed(
+  /^\s*[{\[][\s\S]*[":,][\s\S]*[}\]]\s*$/,
+);
 
 const { TextArea } = Input;
 
@@ -20,6 +26,9 @@ const JsonTool: React.FC<Props> = ({ onBack }) => {
   const [error, setError] = useState("");
   const [valid, setValid] = useState(false);
 
+  // 全局搜索直达：命中输入模式后自动填入
+  JSON_SEARCH_FEED.useFeedValue(setInput);
+
   const process = (mode: "format" | "minify") => {
     const source = input.trim();
     if (!source) {
@@ -30,7 +39,11 @@ const JsonTool: React.FC<Props> = ({ onBack }) => {
     }
     try {
       const parsed = JSON.parse(source);
-      setOutput(mode === "format" ? JSON.stringify(parsed, null, indent) : JSON.stringify(parsed));
+      setOutput(
+        mode === "format"
+          ? JSON.stringify(parsed, null, indent)
+          : JSON.stringify(parsed),
+      );
       setError("");
       setValid(true);
       recordUsage({
@@ -97,9 +110,20 @@ const JsonTool: React.FC<Props> = ({ onBack }) => {
         style={{ fontFamily: "monospace", fontSize: 12, marginBottom: 12 }}
       />
 
-      {valid ? <Tag color="success" style={{ marginBottom: 8 }}>JSON 合法</Tag> : null}
+      {valid ? (
+        <Tag color="success" style={{ marginBottom: 8 }}>
+          JSON 合法
+        </Tag>
+      ) : null}
       {error ? (
-        <Alert type="error" message="解析失败" description={<pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{error}</pre>} style={{ marginBottom: 12 }} />
+        <Alert
+          type="error"
+          message="解析失败"
+          description={
+            <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{error}</pre>
+          }
+          style={{ marginBottom: 12 }}
+        />
       ) : null}
 
       {output ? (

@@ -9,7 +9,16 @@
  * 显示格式也统一由 utils 的 formatDateTime / weekdayLabel 输出。
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Button, DatePicker, InputNumber, Radio, Select, Space, Tag, Typography } from "antd";
+import {
+  Button,
+  DatePicker,
+  InputNumber,
+  Radio,
+  Select,
+  Space,
+  Tag,
+  Typography,
+} from "antd";
 import { SwapOutlined } from "@ant-design/icons";
 import dayjs, { type Dayjs } from "dayjs";
 import {
@@ -26,6 +35,13 @@ import {
 import { CopyButton, StatRow, ToolShell } from "../components/Common";
 import ToolHistoryPanel from "../components/ToolHistory";
 import { recordUsageDebounced, suppressNextRecord } from "../historyClient";
+import { createToolSearchFeed } from "./searchFeed";
+
+// 时间计算器的全局搜索直达：匹配 2026-10-13、2026/10/13 15:30:00 等
+// 日期/日期时间文本（与时间戳转换同形态，命中后填入起始时刻）
+export const TIMECALC_SEARCH_FEED = createToolSearchFeed(
+  /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:[ t]\d{1,2}:\d{2}(?::\d{2})?)?$/,
+);
 
 const { Text } = Typography;
 
@@ -46,6 +62,13 @@ const TimeCalcTool: React.FC<Props> = ({ onBack }) => {
   const [from, setFrom] = useState<Dayjs | null>(() => dayjs());
   const [to, setTo] = useState<Dayjs | null>(() => dayjs().add(1, "day"));
 
+  // 全局搜索直达：日期文本用纯函数解析后填入起始时刻（from）
+  const feedTimeCalc = useCallback((value: string) => {
+    const d = parseDateTime(value);
+    if (d) setFrom(dayjs(d));
+  }, []);
+  TIMECALC_SEARCH_FEED.useFeedValue(feedTimeCalc);
+
   const [base, setBase] = useState<Dayjs | null>(() => dayjs());
   const [amount, setAmount] = useState(30);
   const [unit, setUnit] = useState<DateUnit>("day");
@@ -61,7 +84,10 @@ const TimeCalcTool: React.FC<Props> = ({ onBack }) => {
   );
 
   const shifted = useMemo(
-    () => (baseDate ? addToDate(baseDate, direction === "add" ? amount : -amount, unit) : null),
+    () =>
+      baseDate
+        ? addToDate(baseDate, direction === "add" ? amount : -amount, unit)
+        : null,
     [baseDate, amount, unit, direction],
   );
 
@@ -76,7 +102,11 @@ const TimeCalcTool: React.FC<Props> = ({ onBack }) => {
             toolTitle: "时间计算器",
             action: "diff",
             summary: `${formatDateTime(fromDate)} ⇢ ${formatDateTime(toDate)} ＝ ${formatDuration(diff.milliseconds)}`,
-            detail: { kind: "diff", from: formatDateTime(fromDate), to: formatDateTime(toDate) },
+            detail: {
+              kind: "diff",
+              from: formatDateTime(fromDate),
+              to: formatDateTime(toDate),
+            },
           };
         }
         if (shifted && baseDate) {
@@ -174,7 +204,10 @@ const TimeCalcTool: React.FC<Props> = ({ onBack }) => {
             <Button size="small" onClick={() => setTo(dayjs().add(1, "day"))}>
               结束 = 明天此刻
             </Button>
-            <Button size="small" onClick={() => setFrom(dayjs().startOf("day"))}>
+            <Button
+              size="small"
+              onClick={() => setFrom(dayjs().startOf("day"))}
+            >
               起始 = 今天 0 点
             </Button>
           </Space>
@@ -197,10 +230,17 @@ const TimeCalcTool: React.FC<Props> = ({ onBack }) => {
                   {formatDuration(diff.milliseconds)}
                 </Text>
                 <Tag color={diff.negative ? "orange" : "success"}>
-                  {diff.negative ? "过去" : diff.milliseconds === 0 ? "同一时刻" : "未来"}
+                  {diff.negative
+                    ? "过去"
+                    : diff.milliseconds === 0
+                      ? "同一时刻"
+                      : "未来"}
                 </Tag>
                 <div style={{ flex: 1 }} />
-                <CopyButton text={formatDuration(diff.milliseconds)} label="复制结论" />
+                <CopyButton
+                  text={formatDuration(diff.milliseconds)}
+                  label="复制结论"
+                />
               </div>
 
               <div
@@ -210,9 +250,21 @@ const TimeCalcTool: React.FC<Props> = ({ onBack }) => {
                   gap: 6,
                 }}
               >
-                <StatRow label="总计天数" value={Number(diff.totalDays.toFixed(4))} copyable />
-                <StatRow label="总计小时" value={Number(diff.totalHours.toFixed(2))} copyable />
-                <StatRow label="总计分钟" value={Math.floor(diff.totalMinutes)} copyable />
+                <StatRow
+                  label="总计天数"
+                  value={Number(diff.totalDays.toFixed(4))}
+                  copyable
+                />
+                <StatRow
+                  label="总计小时"
+                  value={Number(diff.totalHours.toFixed(2))}
+                  copyable
+                />
+                <StatRow
+                  label="总计分钟"
+                  value={Math.floor(diff.totalMinutes)}
+                  copyable
+                />
                 <StatRow label="总计秒数" value={diff.totalSeconds} copyable />
                 <StatRow
                   label="自然年月日"
@@ -222,8 +274,14 @@ const TimeCalcTool: React.FC<Props> = ({ onBack }) => {
                       : "—"
                   }
                 />
-                <StatRow label="工作日（含首尾）" value={`${diff.businessDays} 天`} />
-                <StatRow label="周末（含首尾）" value={`${diff.weekendDays} 天`} />
+                <StatRow
+                  label="工作日（含首尾）"
+                  value={`${diff.businessDays} 天`}
+                />
+                <StatRow
+                  label="周末（含首尾）"
+                  value={`${diff.weekendDays} 天`}
+                />
                 <StatRow
                   label="星期"
                   value={`${weekdayLabel(fromDate)} ${diff.negative ? "←" : "→"} ${weekdayLabel(toDate)}`}
@@ -289,7 +347,10 @@ const TimeCalcTool: React.FC<Props> = ({ onBack }) => {
               value={unit}
               onChange={(v) => setUnit(v)}
               style={{ width: 100 }}
-              options={DATE_UNITS.map((u) => ({ label: u.label, value: u.unit }))}
+              options={DATE_UNITS.map((u) => ({
+                label: u.label,
+                value: u.unit,
+              }))}
             />
           </Space>
 
@@ -301,10 +362,18 @@ const TimeCalcTool: React.FC<Props> = ({ onBack }) => {
                 gap: 6,
               }}
             >
-              <StatRow label="结果时刻" value={formatDateTime(shifted)} copyable />
+              <StatRow
+                label="结果时刻"
+                value={formatDateTime(shifted)}
+                copyable
+              />
               <StatRow label="星期" value={weekdayLabel(shifted)} />
               <StatRow label="日期" value={formatDate(shifted)} copyable />
-              <StatRow label="时间戳（毫秒）" value={shifted.getTime()} copyable />
+              <StatRow
+                label="时间戳（毫秒）"
+                value={shifted.getTime()}
+                copyable
+              />
             </div>
           ) : (
             <Text type="danger" style={{ fontSize: 12 }}>

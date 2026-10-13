@@ -8,6 +8,16 @@ import { base64Decode, base64Encode } from "../utils";
 import { CopyButton, ToolShell } from "../components/Common";
 import ToolHistoryPanel from "../components/ToolHistory";
 import { recordUsage } from "../historyClient";
+import { createToolSearchFeed } from "./searchFeed";
+
+// URL 编解码的全局搜索直达：匹配含 %XX 转义序列的 URL 编码文本
+export const URL_SEARCH_FEED = createToolSearchFeed(/%[0-9a-f]{2}/);
+
+// Base64 编解码的全局搜索直达：匹配 12 字符以上、总长为 4 的倍数的 Base64 编码串
+// （排除纯数字时间戳与含 / 的类路径文本等误命中）
+export const BASE64_SEARCH_FEED = createToolSearchFeed(
+  /^(?=[a-z0-9+/=]{12,}$)(?:[a-z0-9+/]{2}==|[a-z0-9+/]{3}=|[a-z0-9+/]{4})+$/,
+);
 
 const { TextArea } = Input;
 
@@ -22,6 +32,10 @@ const EncodeTool: React.FC<Props> = ({ onBack, mode }) => {
   const [encoded, setEncoded] = useState("");
   const [error, setError] = useState("");
 
+  // 全局搜索直达：命中输入模式后自动填入（两种 mode 共用输入 state，两个 feed 均指向编码侧输入框）
+  URL_SEARCH_FEED.useFeedValue(setEncoded);
+  BASE64_SEARCH_FEED.useFeedValue(setEncoded);
+
   const encode = () => {
     setError("");
     try {
@@ -32,7 +46,12 @@ const EncodeTool: React.FC<Props> = ({ onBack, mode }) => {
         toolTitle: isBase64 ? "Base64 编解码" : "URL 编解码",
         action: "encode",
         summary: `编码 ${plain.length} 字符 → ${out.length} 字符`,
-        detail: { inputLen: plain.length, outputLen: out.length, plain, encoded: out },
+        detail: {
+          inputLen: plain.length,
+          outputLen: out.length,
+          plain,
+          encoded: out,
+        },
       });
     } catch (e) {
       setError((e as Error).message);
@@ -42,17 +61,26 @@ const EncodeTool: React.FC<Props> = ({ onBack, mode }) => {
   const decode = () => {
     setError("");
     try {
-      const out = isBase64 ? base64Decode(encoded) : decodeURIComponent(encoded.replace(/\+/g, "%20"));
+      const out = isBase64
+        ? base64Decode(encoded)
+        : decodeURIComponent(encoded.replace(/\+/g, "%20"));
       setPlain(out);
       recordUsage({
         toolId: isBase64 ? "base64" : "url",
         toolTitle: isBase64 ? "Base64 编解码" : "URL 编解码",
         action: "decode",
         summary: `解码 ${encoded.length} 字符 → ${out.length} 字符`,
-        detail: { inputLen: encoded.length, outputLen: out.length, plain: out, encoded },
+        detail: {
+          inputLen: encoded.length,
+          outputLen: out.length,
+          plain: out,
+          encoded,
+        },
       });
     } catch (e) {
-      setError(isBase64 ? "Base64 格式不合法，无法解码" : "URL 编码不合法，无法解码");
+      setError(
+        isBase64 ? "Base64 格式不合法，无法解码" : "URL 编码不合法，无法解码",
+      );
     }
   };
 
@@ -80,7 +108,9 @@ const EncodeTool: React.FC<Props> = ({ onBack, mode }) => {
         </Space>
       }
     >
-      {error ? <Alert type="error" message={error} style={{ marginBottom: 12 }} /> : null}
+      {error ? (
+        <Alert type="error" message={error} style={{ marginBottom: 12 }} />
+      ) : null}
       <div style={{ marginBottom: 8 }}>
         <Space size={8}>
           <span style={{ fontSize: 12, opacity: 0.7 }}>明文</span>
@@ -96,14 +126,20 @@ const EncodeTool: React.FC<Props> = ({ onBack, mode }) => {
       />
       <div style={{ marginBottom: 8 }}>
         <Space size={8}>
-          <span style={{ fontSize: 12, opacity: 0.7 }}>{isBase64 ? "Base64" : "编码后"}</span>
+          <span style={{ fontSize: 12, opacity: 0.7 }}>
+            {isBase64 ? "Base64" : "编码后"}
+          </span>
           <CopyButton text={encoded} />
         </Space>
       </div>
       <TextArea
         value={encoded}
         onChange={(e) => setEncoded(e.target.value)}
-        placeholder={isBase64 ? "输入 Base64 字符串进行解码…" : "输入 URL 编码字符串进行解码…"}
+        placeholder={
+          isBase64
+            ? "输入 Base64 字符串进行解码…"
+            : "输入 URL 编码字符串进行解码…"
+        }
         autoSize={{ minRows: 4, maxRows: 8 }}
         style={{ fontFamily: "monospace", fontSize: 12 }}
       />

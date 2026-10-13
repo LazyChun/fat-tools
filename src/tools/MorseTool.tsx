@@ -4,7 +4,13 @@
  * 编码：字母间空格、单词间 " / "；解码兼容 3 个以上空格作单词分隔。
  * 额外提供电码音频点播（Web Audio 振荡器）与对照表，方便学习 / 抄收。
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button, Collapse, Input, Radio, Space, Tag, Typography } from "antd";
 import {
   ClearOutlined,
@@ -22,8 +28,12 @@ import {
 import { CopyButton, StatRow, ToolShell } from "../components/Common";
 import ToolHistoryPanel from "../components/ToolHistory";
 import { recordUsageDebounced, suppressNextRecord } from "../historyClient";
+import { createToolSearchFeed } from "./searchFeed";
 
 const { Text, Paragraph } = Typography;
+
+// 摩斯电码的全局搜索直达：匹配点/划组成的摩斯电码串（如 ".... ---"）
+export const MORSE_SEARCH_FEED = createToolSearchFeed(/^[.\-][.\-/ ]{3,}$/);
 
 interface Props {
   onBack?: () => void;
@@ -40,6 +50,9 @@ const MorseTool: React.FC<Props> = ({ onBack }) => {
   const [input, setInput] = useState("SOS hello world");
   const [playing, setPlaying] = useState(false);
   const [audioError, setAudioError] = useState("");
+
+  // 全局搜索直达：命中输入模式后自动填入（文本/电码共用主输入框）
+  MORSE_SEARCH_FEED.useFeedValue(setInput);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const stopFnRef = useRef<(() => void) | null>(null);
@@ -62,7 +75,10 @@ const MorseTool: React.FC<Props> = ({ onBack }) => {
     [mode, input],
   );
 
-  const symbolCount = useMemo(() => [...output.replace(/\s/g, "")].length, [output]);
+  const symbolCount = useMemo(
+    () => [...output.replace(/\s/g, "")].length,
+    [output],
+  );
 
   // 操作记录（防抖落库）
   useEffect(() => {
@@ -103,7 +119,8 @@ const MorseTool: React.FC<Props> = ({ onBack }) => {
 
     const Ctor =
       window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
     if (!Ctor) {
       setAudioError("当前环境不支持音频播放（缺少 AudioContext）。");
       return;
@@ -124,7 +141,10 @@ const MorseTool: React.FC<Props> = ({ onBack }) => {
     let t = ctx.currentTime + 0.06;
     const words = morse.trim().split(/\s*\/\s*|\s{3,}/);
     for (const word of words) {
-      const letters = word.trim().split(/\s+/).filter((s) => s !== "");
+      const letters = word
+        .trim()
+        .split(/\s+/)
+        .filter((s) => s !== "");
       for (const letter of letters) {
         for (const sym of letter) {
           const dur = sym === "-" ? UNIT * 3 : UNIT;
@@ -150,11 +170,14 @@ const MorseTool: React.FC<Props> = ({ onBack }) => {
       }
     };
     setPlaying(true);
-    timerRef.current = window.setTimeout(() => {
-      setPlaying(false);
-      stopFnRef.current = null;
-      timerRef.current = null;
-    }, (end - ctx.currentTime) * 1000 + 150);
+    timerRef.current = window.setTimeout(
+      () => {
+        setPlaying(false);
+        stopFnRef.current = null;
+        timerRef.current = null;
+      },
+      (end - ctx.currentTime) * 1000 + 150,
+    );
   }, [playableMorse, stopPlayback]);
 
   /** 把输出结果回填到输入框（编码 ⇄ 解码互转） */
@@ -266,7 +289,8 @@ const MorseTool: React.FC<Props> = ({ onBack }) => {
           </div>
           {mode === "decode" && input.trim() && !isMorseSymbols(input) ? (
             <Text type="warning" style={{ fontSize: 12 }}>
-              输入含非电码字符（仅支持 . - 空格 / 与换行），这些片段会显示为「?」。
+              输入含非电码字符（仅支持 . - 空格 /
+              与换行），这些片段会显示为「?」。
             </Text>
           ) : null}
         </div>
@@ -279,9 +303,18 @@ const MorseTool: React.FC<Props> = ({ onBack }) => {
               gap: 6,
             }}
           >
-            <StatRow label="字符数" value={[...input.replace(/\s/g, "")].length} />
-            <StatRow label="单词数" value={input.trim() ? input.trim().split(/\s+/).length : 0} />
-            <StatRow label="音长估算" value={`${(symbolCount * UNIT).toFixed(1)} 秒起`} />
+            <StatRow
+              label="字符数"
+              value={[...input.replace(/\s/g, "")].length}
+            />
+            <StatRow
+              label="单词数"
+              value={input.trim() ? input.trim().split(/\s+/).length : 0}
+            />
+            <StatRow
+              label="音长估算"
+              value={`${(symbolCount * UNIT).toFixed(1)} 秒起`}
+            />
           </div>
         ) : null}
 
@@ -296,7 +329,8 @@ const MorseTool: React.FC<Props> = ({ onBack }) => {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+                    gridTemplateColumns:
+                      "repeat(auto-fill, minmax(300px, 1fr))",
                     gap: 12,
                   }}
                 >
@@ -305,7 +339,8 @@ const MorseTool: React.FC<Props> = ({ onBack }) => {
                       key={gi}
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))",
+                        gridTemplateColumns:
+                          "repeat(auto-fill, minmax(88px, 1fr))",
                         gap: 4,
                         fontSize: 12,
                         fontFamily: "monospace",
@@ -328,8 +363,8 @@ const MorseTool: React.FC<Props> = ({ onBack }) => {
         />
 
         <Paragraph type="secondary" style={{ fontSize: 12, margin: 0 }}>
-          规则：点「.」1 单位、划「-」3 单位，符号间隔 1 单位，字母间隔 3 单位，单词间隔 7 单位；
-          文本中的空格在电码里写作「/」。
+          规则：点「.」1 单位、划「-」3 单位，符号间隔 1 单位，字母间隔 3
+          单位，单词间隔 7 单位； 文本中的空格在电码里写作「/」。
         </Paragraph>
 
         <ToolHistoryPanel

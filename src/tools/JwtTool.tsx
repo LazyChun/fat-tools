@@ -7,6 +7,12 @@ import { decodeJwt, JWT_TIME_CLAIMS } from "../utils";
 import { CopyButton, ToolShell } from "../components/Common";
 import ToolHistoryPanel from "../components/ToolHistory";
 import { recordUsageDebounced, suppressNextRecord } from "../historyClient";
+import { createToolSearchFeed } from "./searchFeed";
+
+// JWT 解析的全局搜索直达：匹配 eyJ 开头的三段式 JWT（header.payload.signature）
+export const JWT_SEARCH_FEED = createToolSearchFeed(
+  /^eyj[a-z0-9_-]{5,}\.[a-z0-9_-]{5,}\.[a-z0-9_-]*$/,
+);
 
 const { Text } = Typography;
 
@@ -31,17 +37,29 @@ function toBase64Url(obj: unknown): string {
 const JwtTool: React.FC<Props> = ({ onBack }) => {
   const [token, setToken] = useState("");
 
+  // 全局搜索直达：命中输入模式后自动填入
+  JWT_SEARCH_FEED.useFeedValue(setToken);
+
   const decoded = useMemo(() => {
     if (!token.trim()) return null;
     try {
       return { ...decodeJwt(token), error: "" };
     } catch (e) {
-      return { header: null, payload: null, signature: "", error: (e as Error).message };
+      return {
+        header: null,
+        payload: null,
+        signature: "",
+        error: (e as Error).message,
+      };
     }
   }, [token]);
 
-  const headerText = decoded?.header ? JSON.stringify(decoded.header, null, 2) : "";
-  const payloadText = decoded?.payload ? JSON.stringify(decoded.payload, null, 2) : "";
+  const headerText = decoded?.header
+    ? JSON.stringify(decoded.header, null, 2)
+    : "";
+  const payloadText = decoded?.payload
+    ? JSON.stringify(decoded.payload, null, 2)
+    : "";
 
   const now = Math.floor(Date.now() / 1000);
   const exp = decoded?.payload?.exp;
@@ -74,7 +92,9 @@ const JwtTool: React.FC<Props> = ({ onBack }) => {
       />
 
       {decoded?.error ? (
-        <div style={{ color: "#cf1322", marginBottom: 10 }}>{decoded.error}</div>
+        <div style={{ color: "#cf1322", marginBottom: 10 }}>
+          {decoded.error}
+        </div>
       ) : null}
 
       {decoded && !decoded.error ? (
@@ -97,7 +117,14 @@ const JwtTool: React.FC<Props> = ({ onBack }) => {
 
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 320px", minWidth: 260 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 4,
+                }}
+              >
                 <Text strong style={{ fontSize: 12 }}>
                   HEADER
                 </Text>
@@ -119,7 +146,14 @@ const JwtTool: React.FC<Props> = ({ onBack }) => {
             </div>
 
             <div style={{ flex: "1 1 320px", minWidth: 260 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 4,
+                }}
+              >
                 <Text strong style={{ fontSize: 12 }}>
                   PAYLOAD
                 </Text>
@@ -148,13 +182,19 @@ const JwtTool: React.FC<Props> = ({ onBack }) => {
               ).map((c) => (
                 <div key={c} style={{ fontSize: 12 }}>
                   <Text type="secondary">
-                    {c} = {String(decoded.payload![c])} → {formatTs(Number(decoded.payload![c]))}
+                    {c} = {String(decoded.payload![c])} →{" "}
+                    {formatTs(Number(decoded.payload![c]))}
                   </Text>
                   {c === "exp" ? (
                     <Text type="secondary">
                       {" "}
-                      （{Number(decoded.payload![c]) > now ? "剩余" : "已超时"}{" "}
-                      {Math.abs(Math.round((Number(decoded.payload![c]) - now) / 60))} 分钟）
+                      （{Number(decoded.payload![c]) > now
+                        ? "剩余"
+                        : "已超时"}{" "}
+                      {Math.abs(
+                        Math.round((Number(decoded.payload![c]) - now) / 60),
+                      )}{" "}
+                      分钟）
                     </Text>
                   ) : null}
                 </div>

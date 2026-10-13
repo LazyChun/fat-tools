@@ -8,6 +8,12 @@ import { parseHexColor, rgbToHex, rgbToHsl } from "../utils";
 import { StatRow, ToolShell } from "../components/Common";
 import ToolHistoryPanel from "../components/ToolHistory";
 import { recordUsageDebounced, suppressNextRecord } from "../historyClient";
+import { createToolSearchFeed } from "./searchFeed";
+
+// 颜色转换的全局搜索直达：匹配 HEX（#ff5500）或 rgb()/hsl() 形式的颜色值
+export const COLOR_SEARCH_FEED = createToolSearchFeed(
+  /^(?:#[0-9a-f]{3,8}|(?:rgb|hsl)a?\(\s*\d+)/,
+);
 
 interface Props {
   onBack?: () => void;
@@ -15,6 +21,9 @@ interface Props {
 
 const ColorTool: React.FC<Props> = ({ onBack }) => {
   const [hex, setHex] = useState("#1E90FF");
+
+  // 全局搜索直达：命中输入模式后自动填入
+  COLOR_SEARCH_FEED.useFeedValue(setHex);
 
   const parsed = useMemo(() => {
     try {
@@ -26,7 +35,8 @@ const ColorTool: React.FC<Props> = ({ onBack }) => {
     }
   }, [hex]);
 
-  const onPickerChange = (_: Color, hexString: string) => setHex(hexString.toUpperCase());
+  const onPickerChange = (_: Color, hexString: string) =>
+    setHex(hexString.toUpperCase());
 
   // 颜色确定（停顿 2s）后落库
   React.useEffect(() => {
@@ -52,8 +62,20 @@ const ColorTool: React.FC<Props> = ({ onBack }) => {
 
   return (
     <ToolShell title="颜色转换" onBack={onBack}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <ColorPicker value={parsed.rgb ? rgbToHex(parsed.rgb) : "#000000"} onChange={onPickerChange} showText />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          marginBottom: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <ColorPicker
+          value={parsed.rgb ? rgbToHex(parsed.rgb) : "#000000"}
+          onChange={onPickerChange}
+          showText
+        />
         <Input
           value={hex}
           onChange={(e) => setHex(e.target.value)}
@@ -76,7 +98,13 @@ const ColorTool: React.FC<Props> = ({ onBack }) => {
       </div>
 
       {parsed.rgb && parsed.hsl ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 6 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+            gap: 6,
+          }}
+        >
           <StatRow label="HEX" value={rgbToHex(parsed.rgb)} copyable />
           <StatRow
             label="RGB"

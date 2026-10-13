@@ -7,6 +7,13 @@ import dayjs from "dayjs";
 import { CopyButton, StatRow, ToolShell } from "../components/Common";
 import ToolHistoryPanel from "../components/ToolHistory";
 import { recordUsageDebounced, suppressNextRecord } from "../historyClient";
+import { createToolSearchFeed } from "./searchFeed";
+
+// 时间戳转换的全局搜索直达：匹配 10/13 位数字时间戳，
+// 或 2026-10-13、2026/10/13 15:30:00 等日期文本（双向转换）
+export const TIMESTAMP_SEARCH_FEED = createToolSearchFeed(
+  /^(?:1\d{9}(?:\d{3})?|\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:[ t]\d{1,2}:\d{2}(?::\d{2})?)?)$/,
+);
 
 interface Props {
   onBack?: () => void;
@@ -20,12 +27,28 @@ const TimestampTool: React.FC<Props> = ({ onBack }) => {
   const [dateInput, setDateInput] = useState("");
   const [unit, setUnit] = useState<Unit>("ms");
 
+  // 全局搜索直达：数字时间戳填入时间戳框，日期文本填入日期框（双向转换）
+  const feedTimestamp = React.useCallback(
+    (value: string) => {
+      if (/^-?\d+$/.test(value.trim())) {
+        setTsInput(value);
+      } else {
+        setDateInput(value);
+      }
+    },
+    [setTsInput, setDateInput],
+  );
+  TIMESTAMP_SEARCH_FEED.useFeedValue(feedTimestamp);
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const nowFormatted = useMemo(() => dayjs(now).format("YYYY-MM-DD HH:mm:ss"), [now]);
+  const nowFormatted = useMemo(
+    () => dayjs(now).format("YYYY-MM-DD HH:mm:ss"),
+    [now],
+  );
 
   const tsToDate = useMemo(() => {
     const raw = tsInput.trim();
@@ -56,7 +79,11 @@ const TimestampTool: React.FC<Props> = ({ onBack }) => {
             toolTitle: "时间戳转换",
             action: "tsToDate",
             summary: `${tsInput} → ${tsToDate.format("YYYY-MM-DD HH:mm:ss")}`,
-            detail: { input: tsInput, unit, result: tsToDate.format("YYYY-MM-DD HH:mm:ss") },
+            detail: {
+              input: tsInput,
+              unit,
+              result: tsToDate.format("YYYY-MM-DD HH:mm:ss"),
+            },
           };
         }
         if (dateToTs) {
@@ -98,10 +125,18 @@ const TimestampTool: React.FC<Props> = ({ onBack }) => {
   return (
     <ToolShell title="时间戳转换" onBack={onBack}>
       <div style={{ display: "grid", gap: 12 }}>
-        <div style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(128,128,128,0.08)" }}>
+        <div
+          style={{
+            padding: "8px 12px",
+            borderRadius: 8,
+            background: "rgba(128,128,128,0.08)",
+          }}
+        >
           <Space size={12} wrap>
             <Tag color="blue">当前时间</Tag>
-            <span style={{ fontFamily: "monospace", fontWeight: 600 }}>{nowFormatted}</span>
+            <span style={{ fontFamily: "monospace", fontWeight: 600 }}>
+              {nowFormatted}
+            </span>
             <span style={{ fontFamily: "monospace" }}>{now}</span>
             <CopyButton text={String(now)} label="复制时间戳" />
             <CopyButton text={nowFormatted} label="复制时间" />
@@ -136,11 +171,29 @@ const TimestampTool: React.FC<Props> = ({ onBack }) => {
             }
           />
           {tsToDate ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 6, marginTop: 8 }}>
-              <StatRow label="本地时间" value={tsToDate.format("YYYY-MM-DD HH:mm:ss")} copyable />
-              <StatRow label="ISO 8601" value={tsToDate.toISOString()} copyable />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))",
+                gap: 6,
+                marginTop: 8,
+              }}
+            >
+              <StatRow
+                label="本地时间"
+                value={tsToDate.format("YYYY-MM-DD HH:mm:ss")}
+                copyable
+              />
+              <StatRow
+                label="ISO 8601"
+                value={tsToDate.toISOString()}
+                copyable
+              />
               <StatRow label="UTC" value={tsToDate.toDate().toUTCString()} />
-              <StatRow label="星期" value={`星期${"日一二三四五六"[tsToDate.day()]}`} />
+              <StatRow
+                label="星期"
+                value={`星期${"日一二三四五六"[tsToDate.day()]}`}
+              />
             </div>
           ) : null}
         </div>
@@ -154,15 +207,34 @@ const TimestampTool: React.FC<Props> = ({ onBack }) => {
               placeholder="输入日期时间，如 2026-10-11 11:30:00"
               style={{ fontFamily: "monospace" }}
             />
-            <Button onClick={() => setDateInput(dayjs().format("YYYY-MM-DD HH:mm:ss"))}>现在</Button>
+            <Button
+              onClick={() =>
+                setDateInput(dayjs().format("YYYY-MM-DD HH:mm:ss"))
+              }
+            >
+              现在
+            </Button>
           </Space.Compact>
           {dateToTs ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 6, marginTop: 8 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))",
+                gap: 6,
+                marginTop: 8,
+              }}
+            >
               <StatRow label="毫秒时间戳" value={dateToTs.valueOf()} copyable />
-              <StatRow label="秒时间戳" value={Math.floor(dateToTs.valueOf() / 1000)} copyable />
+              <StatRow
+                label="秒时间戳"
+                value={Math.floor(dateToTs.valueOf() / 1000)}
+                copyable
+              />
             </div>
           ) : dateInput ? (
-            <Tag color="error" style={{ marginTop: 8 }}>无法解析的日期格式</Tag>
+            <Tag color="error" style={{ marginTop: 8 }}>
+              无法解析的日期格式
+            </Tag>
           ) : null}
         </div>
 

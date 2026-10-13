@@ -7,6 +7,10 @@ import { convertRadix } from "../utils";
 import { StatRow, ToolShell } from "../components/Common";
 import ToolHistoryPanel from "../components/ToolHistory";
 import { recordUsageDebounced, suppressNextRecord } from "../historyClient";
+import { createToolSearchFeed } from "./searchFeed";
+
+// 进制转换的全局搜索直达：匹配 0x/0b/0o 前缀的进制字面量（如 0x1f、0b1010）
+export const RADIX_SEARCH_FEED = createToolSearchFeed(/^0[xbo][0-9a-f]+$/);
 
 interface Props {
   onBack?: () => void;
@@ -24,6 +28,9 @@ const RadixTool: React.FC<Props> = ({ onBack }) => {
   const [value, setValue] = useState("");
   const [from, setFrom] = useState(10);
 
+  // 全局搜索直达：命中输入模式后自动填入
+  RADIX_SEARCH_FEED.useFeedValue(setValue);
+
   const results = useMemo(() => {
     if (!value.trim()) return null;
     try {
@@ -38,16 +45,24 @@ const RadixTool: React.FC<Props> = ({ onBack }) => {
 
   // 输入停顿后把本次转换落库
   React.useEffect(() => {
-    recordUsageDebounced("radix", () => {
-      if (!value.trim() || !results || results === "error") return null;
-      return {
-        toolId: "radix",
-        toolTitle: "进制转换",
-        action: "convert",
-        summary: `${value}（${from} 进制）→ 2/8/10/16/36 进制`,
-        detail: { input: value, fromBase: from, decimal: results[2]?.value ?? "" },
-      };
-    }, 1500);
+    recordUsageDebounced(
+      "radix",
+      () => {
+        if (!value.trim() || !results || results === "error") return null;
+        return {
+          toolId: "radix",
+          toolTitle: "进制转换",
+          action: "convert",
+          summary: `${value}（${from} 进制）→ 2/8/10/16/36 进制`,
+          detail: {
+            input: value,
+            fromBase: from,
+            decimal: results[2]?.value ?? "",
+          },
+        };
+      },
+      1500,
+    );
   }, [value, from, results]);
 
   return (
@@ -90,7 +105,9 @@ const RadixTool: React.FC<Props> = ({ onBack }) => {
           ))}
         </div>
       ) : results === "error" ? (
-        <div style={{ color: "#cf1322" }}>输入与原进制不匹配，请检查（仅支持整数）</div>
+        <div style={{ color: "#cf1322" }}>
+          输入与原进制不匹配，请检查（仅支持整数）
+        </div>
       ) : null}
 
       <ToolHistoryPanel
