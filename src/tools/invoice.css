@@ -1,0 +1,28 @@
+/*
+ * 发票工具：紧凑上传区样式
+ *
+ * 宿主（FatNotes）共享 antd，.ant-upload-drag 的默认 padding / min-height
+ * 会把拖拽区撑得过高，这里用唯一类名显式收敛高度（.css 走全局，不受 CSS Modules 影响）。
+ */
+.invoice-upload.ant-upload-wrapper,
+.invoice-upload.ant-upload-wrapper .ant-upload,
+.invoice-upload.ant-upload-wrapper .ant-upload-drag,
+.invoice-upload.ant-upload-wrapper .ant-upload-drag-container {
+  height: 56px;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.invoice-upload.ant-upload-wrapper .ant-upload-drag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.invoice-upload.ant-upload-wrapper .ant-upload-drag-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}

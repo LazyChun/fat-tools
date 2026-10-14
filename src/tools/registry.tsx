@@ -52,6 +52,7 @@ import {
   SnippetsOutlined,
   SmileOutlined,
   FileSyncOutlined,
+  FileTextOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -101,6 +102,7 @@ import GridMergeTool from "./GridMergeTool";
 import MemeTool from "./MemeTool";
 import ScreenshotTool from "./ScreenshotTool";
 import ConvertTool from "./ConvertTool";
+import InvoiceTool from "./InvoiceTool";
 
 export type ToolCategory =
   | "文本"
@@ -443,6 +445,14 @@ export const TOOLS: ToolDef[] = [
     icon: ScissorOutlined,
     category: "文件",
     component: (props) => <PdfTool {...props} mode="split" />,
+  },
+  {
+    id: "invoice",
+    title: "发票工具",
+    desc: "电子发票处理：智能合并、信息提取、批量重命名、自动归档",
+    icon: FileTextOutlined,
+    category: "文件",
+    component: InvoiceTool,
   },
   {
     id: "grid-split",

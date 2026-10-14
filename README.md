@@ -56,7 +56,7 @@ If names don't match you will see:
 - `types/fat-notes-sdk.d.ts` — SDK type declarations (mirror of host).
 - `webpack.config.js` — Module Federation build (`exposes ./plugin`).
 
-## 内置工具（47 个，纯前端实现）
+## 内置工具（48 个，纯前端实现）
 
 菜单按分类展示，点击卡片 → `sdk.router.navigate("/tools/<toolId>")`。
 
@@ -70,11 +70,23 @@ If names don't match you will see:
 | 生成 | 密码生成器、条形码生成、随机字符生成、转盘抽签、智能取名 |
 | 时间 | 秒表 / 倒计时、时间计算器、假期日历、农历转换 |
 | 生活 | 亲友关系图谱、血型图谱、星座罗盘、易经算命、网站导航 |
-| 文件 | PDF 合并、PDF 分割、格子拆图、格子合图、屏幕截图 |
+| 文件 | PDF 合并、PDF 分割、发票工具、格子拆图、格子合图、屏幕截图、格式转换 |
 | 记录 | 待办清单、操作记录 |
 
 > 新增工具只需在 `src/tools/registry.tsx` 加一条记录（`ToolCategory` 已支持上表分类），
 > 纯计算逻辑收敛到 `src/utils.ts`（不依赖 DOM，便于 `vitest` 单测）。
+
+### 发票工具（电子发票处理）
+
+纯前端处理，发票文件不上传（依赖 `pdfjs-dist` / `pdf-lib` / `jszip`）：
+
+- 智能合并：多份发票 PDF 合并为一份
+- 信息提取：pdf.js 提取文本 → 正则解析发票号码 / 代码 / 开票日期 / 价税合计 / 购销方与税号（兼容数电票 20 位号码与老式代码+号码）
+- 批量重命名：`{date} {invoiceNo} {seller} {buyer} {amount} {type} {index}` 占位符模板，缺失字段自动折叠
+- 自动归档：按开票年月 / 销售方 / 购买方 / 发票类型分目录，ZIP 打包并附「发票信息.csv」（UTF-8 BOM）
+
+解析核心在 `src/tools/invoice/core.ts`（纯函数，`tests/invoice.test.ts` 单测）；
+pdf.js worker 经 `webpack.config.js` 的 `asset/resource` 规则输出为独立 `.mjs`，运行时以 module worker 加载。
 
 ## 布局约定（参考 fat-stock）
 

@@ -86,6 +86,12 @@ module.exports = (_, argv) => {
           test: /\.(png|jpe?g|gif|svg)$/i,
           type: "asset/resource",
         },
+        // pdf.js worker：作为独立资源输出（module worker 运行时加载），
+        // 避免被当作普通 JS 模块打进主 bundle（?worker/?url 语法对包内路径不可靠）
+        {
+          test: /pdf\.worker(\.min)?\.mjs$/,
+          type: "asset/resource",
+        },
       ],
     },
     plugins: [

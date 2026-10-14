@@ -1,3 +1,9 @@
+// pdf.js worker：webpack asset/resource 输出，导入得到资源 URL
+declare module "pdfjs-dist/build/pdf.worker.min.mjs" {
+  const url: string;
+  export default url;
+}
+
 declare module "*.less" {
   const content: { [className: string]: string };
   export default content;
