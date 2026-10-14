@@ -34,3 +34,10 @@ FatNotes 定制插件「fat-tools」——开发者常用工具箱。Monorepo �
 
 - 偏好「工具越多越好」，持续扩充实用的纯前端小工具。
 - 交流与文档用简体中文；代码注释沿用中文风格。
+
+## 已落地工具：中华朝代年鉴（toolId=dynasty，2026-10-14）
+
+- 设计语言「青史长河」：顶卡 SVG 时间轴（-2070..2026，车道贪心分层 assignLanes + 治乱色带），「历代之最」三卡，左侧 8 时期分组导航 + 右侧「概览/疆域/人物/大事记」Tabs，工具栏可切「双朝对照」。
+- 数据在 `src/tools/dynastyData.ts`（28 政权 + ERAS + FIGURE_ROLE_LABEL），疆域示意在 `territoryData.ts`（CHINA_OUTLINE + DYNASTY_TERRITORIES，必须覆盖全部朝代 id），纯函数在 `src/utils.ts`（yearLabel/spanLabel/durationYears/timelineX/assignLanes/areaRatio/areaRank/formatAreaKm2/polygonPath/dynastyHighlights）。
+- 关键不变式（`tests/dynasty.test.ts` 已锁定）：车道断言 xia/dongjin=0、shiliuguo/wuzhou/liao=1、xixia=2、jin=3、max=3；之最 = 商 554 年 / 元 1400 万 km² / 统一占比 0.3~0.4；TIMELINE_MIN_BAND=10。
+- 坑：为让「主序列」占 0 车道，三国终点取 265（魏禅晋）、五代十国终点取 960（后周禅宋），勿改回 280/979 否则车道断言失败；字符串内中文引号必须用「“”」而非 ASCII `"`（曾致全文件 TS1005）。

@@ -53,6 +53,7 @@ import {
   SmileOutlined,
   FileSyncOutlined,
   FileTextOutlined,
+  HistoryOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -97,6 +98,7 @@ import PdfTool from "./PdfTool";
 import XmlTool from "./XmlTool";
 import SmartNameTool from "./SmartNameTool";
 import NavTool from "./NavTool";
+import DynastyTool from "./DynastyTool";
 import GridSplitTool from "./GridSplitTool";
 import GridMergeTool from "./GridMergeTool";
 import MemeTool from "./MemeTool";
@@ -114,7 +116,8 @@ export type ToolCategory =
   | "时间"
   | "生活"
   | "文件"
-  | "记录";
+  | "记录"
+  | "历史";
 
 export interface ToolDef {
   id: string;
@@ -517,6 +520,14 @@ export const TOOLS: ToolDef[] = [
     icon: AppstoreOutlined,
     category: "生活",
     component: NavTool,
+  },
+  {
+    id: "dynasty",
+    title: "中华朝代年鉴",
+    desc: "历朝时间轴 · 疆域示意图 · 人物与大事记，支持双朝对照",
+    icon: HistoryOutlined,
+    category: "历史",
+    component: DynastyTool,
   },
   {
     id: "history",

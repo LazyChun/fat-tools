@@ -6923,3 +6923,144 @@ export function memeFileName(ext: string): string {
   const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   return `meme-${ts}.${ext}`;
 }
+
+/* ── 中华朝代年鉴（年份 / 时间轴 / 统计） ───────────────────── */
+
+/**
+ * 年份展示：负数 → "前 N"，正数 → "N"。
+ * 如 yearLabel(-221) = "前 221"，yearLabel(618) = "618"。
+ */
+export function yearLabel(year: number): string {
+  return year < 0 ? `前 ${-year}` : `${year}`;
+}
+
+/** 时间段展示：start — end（endToday 时显示 "至今"） */
+export function spanLabel(start: number, end: number, endToday?: boolean): string {
+  return endToday
+    ? `${yearLabel(start)} — 至今`
+    : `${yearLabel(start)} — ${yearLabel(end)}`;
+}
+
+/** 国祚（年），取首尾差值（约数；如 秦 前221—前206 → 15） */
+export function durationYears(start: number, end: number): number {
+  return end - start;
+}
+
+/** 时间轴坐标：年份 → x 像素（min/max 为轴区间） */
+export function timelineX(year: number, min: number, max: number, width: number): number {
+  const span = max - min;
+  if (span <= 0) return 0;
+  return ((year - min) / span) * width;
+}
+
+/** 时间轴最小可读宽度（小于此宽度不绘制） */
+export const TIMELINE_MIN_BAND = 10;
+
+/**
+ * 车道分配（贪心）：让时间上重叠的条目分到不同车道。
+ * 返回与输入同序的车道号数组（0 起）。
+ * - 条目的 lane 字段为"首选车道"（如主序列传 0）；
+ *   若该车道被更晚结束的前序条目占用，则逐级向上找空位。
+ * - 同一车道内按 start 升序处理，首尾相接（end === next.start）不算重叠。
+ */
+export function assignLanes<T extends { start: number; end: number; lane?: number }>(
+  items: T[],
+): number[] {
+  const order = items
+    .map((it, i) => ({ it, i }))
+    .sort((a, b) => a.it.start - b.it.start || a.it.end - b.it.end);
+  const laneEnds: number[] = [];
+  const result: number[] = new Array(items.length).fill(0);
+  for (const { it, i } of order) {
+    let lane = it.lane ?? 0;
+    while (laneEnds[lane] !== undefined && laneEnds[lane] > it.start) lane += 1;
+    laneEnds[lane] = Math.max(laneEnds[lane] ?? Number.NEGATIVE_INFINITY, it.end);
+    result[i] = lane;
+  }
+  return result;
+}
+
+/** 面积对比比例（0..1，相对最大值） */
+export function areaRatio(area: number, maxArea: number): number {
+  if (maxArea <= 0) return 0;
+  return Math.min(1, area / maxArea);
+}
+
+/** 面积排名（降序，1 起；并列取最前名次） */
+export function areaRank(area: number, areas: number[]): number {
+  const sorted = [...areas].sort((a, b) => b - a);
+  const idx = sorted.indexOf(area);
+  return idx === -1 ? sorted.length : idx + 1;
+}
+
+/** 面积展示文本 */
+export function formatAreaKm2(areaKm2: number): string {
+  return `约 ${areaKm2} 万 km²`;
+}
+
+/** 多边形顶点 → SVG path（d 属性） */
+export function polygonPath(pts: [number, number][]): string {
+  if (!pts.length) return "";
+  return `M ${pts.map(([x, y]) => `${x} ${y}`).join(" L ")} Z`;
+}
+
+/** 历代之最统计（纯函数，便于单测） */
+export interface DynastyHighlights {
+  /** 单段国祚最长的朝代 */
+  longest: { id: string; name: string; years: number };
+  /** 疆域（约略面积）最大的朝代 */
+  largest: { id: string; name: string; area: number };
+  /** 大一统（regime === "统一"）总年数与占比 */
+  unifiedYears: number;
+  totalYears: number;
+  /** 统一年数占比（0..1） */
+  unifiedRatio: number;
+}
+
+export function dynastyHighlights(
+  dynasties: {
+    id: string;
+    name: string;
+    start: number;
+    end: number;
+    regime: string;
+    areaKm2?: number;
+  }[],
+): DynastyHighlights {
+  if (!dynasties.length) {
+    return {
+      longest: { id: "", name: "", years: 0 },
+      largest: { id: "", name: "", area: 0 },
+      unifiedYears: 0,
+      totalYears: 0,
+      unifiedRatio: 0,
+    };
+  }
+  let longest = dynasties[0];
+  let largest = dynasties.find((d) => d.areaKm2 !== undefined);
+  let unifiedYears = 0;
+  let totalYears = 0;
+  for (const d of dynasties) {
+    const years = durationYears(d.start, d.end);
+    totalYears += years;
+    if (d.regime === "统一") unifiedYears += years;
+    if (years > durationYears(longest.start, longest.end)) longest = d;
+    if (
+      d.areaKm2 !== undefined &&
+      largest &&
+      largest.areaKm2 !== undefined &&
+      d.areaKm2 > largest.areaKm2
+    ) {
+      largest = d;
+    }
+  }
+  return {
+    longest: { id: longest.id, name: longest.name, years: durationYears(longest.start, longest.end) },
+    largest: largest
+      ? { id: largest.id, name: largest.name, area: largest.areaKm2 ?? 0 }
+      : { id: "", name: "", area: 0 },
+    unifiedYears,
+    totalYears,
+    unifiedRatio: totalYears > 0 ? unifiedYears / totalYears : 0,
+  };
+}

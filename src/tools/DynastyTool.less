@@ -1,0 +1,487 @@
+/*
+ * 中华朝代年鉴样式（CSS Modules）
+ *
+ * 设计语言："青史长河" —— 宣纸质感卡片 + 色带时间轴，
+ * 暖调"史册"在浅色主题呈现，深色主题自动切换为暗色纸面。
+ */
+
+/* ── 纸面卡片 ───────────────────────────────────────────── */
+.paper {
+  position: relative;
+  border: 1px solid rgba(128, 128, 128, 0.22);
+  border-radius: 14px;
+  background: linear-gradient(160deg, #fdf9f0 0%, #f7efdd 55%, #f2e6cc 100%);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.rootDark .paper {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* ── 顶部时间轴卡片 ─────────────────────────────────────── */
+.timelineCard {
+  padding: 10px 12px 8px;
+  margin-bottom: 12px;
+}
+
+.timelineHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.timelineTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.timelineSub {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.timelineLegend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.legendChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.timelineScroll {
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+/* ── 历代之最三卡 ───────────────────────────────────────── */
+.highlightRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.highlightCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(128, 128, 128, 0.18);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.rootDark .highlightCard {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.highlightIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.highlightLabel {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.highlightValue {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ── 主从布局：左导航 + 右详情 ──────────────────────────── */
+.mainRow {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.eraNav {
+  width: 236px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+}
+
+.eraHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.72;
+  padding: 2px 4px 4px;
+}
+
+.eraCount {
+  font-size: 10px;
+  opacity: 0.5;
+  font-weight: 400;
+}
+
+.dynList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dynItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+  position: relative;
+}
+
+.dynItem:hover {
+  background: rgba(128, 128, 128, 0.08);
+}
+
+.dynItemActive {
+  background: rgba(22, 119, 255, 0.1);
+  border-color: rgba(22, 119, 255, 0.4);
+}
+
+.dynDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
+.dynName {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dynYears {
+  font-size: 11px;
+  opacity: 0.55;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.dynBar {
+  position: absolute;
+  bottom: 2px;
+  left: 26px;
+  height: 2px;
+  border-radius: 2px;
+  opacity: 0.5;
+}
+
+.detailCard {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 概览 ───────────────────────────────────────────────── */
+.hero {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 2px 2px 10px;
+}
+
+.heroSeal {
+  width: 62px;
+  height: 62px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 25px;
+  font-weight: 800;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  letter-spacing: 1px;
+}
+
+.heroName {
+  font-size: 25px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.heroMeta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 5px 0 6px;
+}
+
+.heroSpan {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.heroIntro {
+  font-size: 13px;
+  line-height: 1.7;
+  opacity: 0.85;
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ── 疆域 ───────────────────────────────────────────────── */
+.mapWrap {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.mapCanvas {
+  flex: 1 1 400px;
+  min-width: 280px;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 12px;
+  background: rgba(128, 128, 128, 0.05);
+  padding: 8px;
+}
+
+.mapSvg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.rootDark .mapSvg {
+  filter: brightness(1.28) saturate(1.08);
+}
+
+.mapSide {
+  flex: 1 1 280px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mapNote {
+  font-size: 11px;
+  opacity: 0.55;
+}
+
+.areaBarRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.areaBar {
+  flex: 1;
+  min-width: 60px;
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(128, 128, 128, 0.15);
+  overflow: hidden;
+}
+
+.areaBarFill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.4s ease;
+}
+
+/* ── 人物 ───────────────────────────────────────────────── */
+.figGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
+  gap: 10px;
+}
+
+.figCard {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  background: rgba(255, 255, 255, 0.55);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.rootDark .figCard {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.figCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  border-color: rgba(22, 119, 255, 0.45);
+}
+
+.figAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.figName {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.figTitle {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-top: 1px;
+}
+
+.figYears {
+  font-size: 11px;
+  opacity: 0.5;
+}
+
+.figAch {
+  font-size: 12px;
+  line-height: 1.55;
+  opacity: 0.82;
+  margin-top: 2px;
+}
+
+/* ── 大事记 ─────────────────────────────────────────────── */
+.eventList {
+  position: relative;
+  padding-left: 22px;
+  border-left: 2px solid rgba(128, 128, 128, 0.22);
+}
+
+.eventItem {
+  position: relative;
+  padding: 0 0 14px 10px;
+}
+
+.eventDot {
+  position: absolute;
+  left: -28px;
+  top: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.12);
+}
+
+.eventYear {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.eventText {
+  font-size: 13px;
+  line-height: 1.6;
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
+/* ── 双朝对照 ───────────────────────────────────────────── */
+.compareBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.compareSel {
+  width: 190px;
+}
+
+.legendName {
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── 窄屏适配 ───────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .mainRow {
+    flex-direction: column;
+  }
+
+  .eraNav {
+    width: 100%;
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .eraGroup {
+    flex: 1 1 45%;
+  }
+
+  .dynList {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .dynItem {
+    flex: 0 0 auto;
+  }
+
+  .dynYears {
+    margin-left: 0;
+  }
+}
