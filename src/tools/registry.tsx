@@ -54,6 +54,10 @@ import {
   FileSyncOutlined,
   FileTextOutlined,
   HistoryOutlined,
+  MoneyCollectOutlined,
+  QrcodeOutlined,
+  ScheduleOutlined,
+  TransactionOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -105,6 +109,10 @@ import MemeTool from "./MemeTool";
 import ScreenshotTool from "./ScreenshotTool";
 import ConvertTool from "./ConvertTool";
 import InvoiceTool from "./InvoiceTool";
+import QrCodeTool from "./QrCodeTool";
+import DataConvertTool from "./DataConvertTool";
+import MoneyUpperTool from "./MoneyUpperTool";
+import CronTool from "./CronTool";
 
 export type ToolCategory =
   | "文本"
@@ -240,6 +248,14 @@ export const TOOLS: ToolDef[] = [
     icon: BarcodeOutlined,
     category: "生成",
     component: BarcodeTool,
+  },
+  {
+    id: "qrcode",
+    title: "二维码工具",
+    desc: "生成二维码（可调纠错/尺寸/颜色，导出 PNG / SVG）并识别图片中的二维码",
+    icon: QrcodeOutlined,
+    category: "生成",
+    component: QrCodeTool,
   },
   {
     id: "naming",
@@ -386,6 +402,14 @@ export const TOOLS: ToolDef[] = [
     component: CurrencyTool,
   },
   {
+    id: "money-upper",
+    title: "金额大写转换",
+    desc: "数字金额转人民币中文大写（财务标准写法），支持角分与正负号",
+    icon: MoneyCollectOutlined,
+    category: "数值",
+    component: MoneyUpperTool,
+  },
+  {
     id: "lunar",
     title: "农历转换",
     desc: "公历 ↔ 农历互转，干支生肖、二十四节气与节日",
@@ -400,6 +424,14 @@ export const TOOLS: ToolDef[] = [
     icon: CloudServerOutlined,
     category: "开发",
     component: DnsTool,
+  },
+  {
+    id: "cron",
+    title: "Cron 表达式解析",
+    desc: "校验 Cron 表达式，字段含义中文说明并推算未来执行时间",
+    icon: ScheduleOutlined,
+    category: "开发",
+    component: CronTool,
   },
   {
     id: "hanzi",
@@ -496,6 +528,14 @@ export const TOOLS: ToolDef[] = [
     icon: ApiOutlined,
     category: "开发",
     component: XmlTool,
+  },
+  {
+    id: "data-convert",
+    title: "数据格式转换",
+    desc: "JSON / YAML / CSV / TSV 互转，实时预览并支持下载",
+    icon: TransactionOutlined,
+    category: "开发",
+    component: DataConvertTool,
   },
   {
     id: "smart-name",
