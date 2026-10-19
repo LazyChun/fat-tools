@@ -23,6 +23,9 @@ const ACTION_COLOR: Record<string, string> = {
   parse: "volcano",
   convert: "gold",
   generate: "magenta",
+  save: "green",
+  export: "cyan",
+  clear: "red",
 };
 
 /** 取 action 的展示色，未收录的用默认蓝 */

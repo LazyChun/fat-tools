@@ -318,7 +318,7 @@ export const TOOLS: ToolDef[] = [
   {
     id: "draw",
     title: "画板",
-    desc: "手绘画笔/形状，撤销重做，导出 PNG",
+    desc: "手绘画笔/形状，撤销重做，自动草稿，保存历史，导出 PNG",
     icon: HighlightOutlined,
     category: "绘图",
     component: DrawTool,
