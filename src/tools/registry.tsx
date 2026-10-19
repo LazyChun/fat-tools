@@ -58,6 +58,11 @@ import {
   QrcodeOutlined,
   ScheduleOutlined,
   TransactionOutlined,
+  FileProtectOutlined,
+  ClusterOutlined,
+  PartitionOutlined,
+  Html5Outlined,
+  BankOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -113,6 +118,11 @@ import QrCodeTool from "./QrCodeTool";
 import DataConvertTool from "./DataConvertTool";
 import MoneyUpperTool from "./MoneyUpperTool";
 import CronTool from "./CronTool";
+import IdCardTool from "./IdCardTool";
+import IpCidrTool from "./IpCidrTool";
+import ChmodTool from "./ChmodTool";
+import HtmlEntityTool from "./HtmlEntityTool";
+import LoanTool from "./LoanTool";
 
 export type ToolCategory =
   | "文本"
@@ -568,6 +578,46 @@ export const TOOLS: ToolDef[] = [
     icon: HistoryOutlined,
     category: "历史",
     component: DynastyTool,
+  },
+  {
+    id: "id-card",
+    title: "身份证校验",
+    desc: "校验位验证，解析省市 / 生日 / 性别 / 年龄，支持 15 位升位",
+    icon: FileProtectOutlined,
+    category: "生活",
+    component: IdCardTool,
+  },
+  {
+    id: "ip-cidr",
+    title: "IP / CIDR 计算",
+    desc: "IPv4 网段、掩码、广播与可用主机，判断 IP 是否在网段内",
+    icon: ClusterOutlined,
+    category: "开发",
+    component: IpCidrTool,
+  },
+  {
+    id: "chmod",
+    title: "Unix 权限",
+    desc: "chmod 数字与符号互转，勾选读写执行与 setuid/setgid/sticky",
+    icon: PartitionOutlined,
+    category: "开发",
+    component: ChmodTool,
+  },
+  {
+    id: "html-entity",
+    title: "HTML 实体",
+    desc: "HTML 实体编解码：命名 / 十进制 / 十六进制",
+    icon: Html5Outlined,
+    category: "编码",
+    component: HtmlEntityTool,
+  },
+  {
+    id: "loan",
+    title: "贷款计算器",
+    desc: "等额本息 / 等额本金，月供、总利息与还款明细",
+    icon: BankOutlined,
+    category: "数值",
+    component: LoanTool,
   },
   {
     id: "history",
