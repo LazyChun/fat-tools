@@ -19,6 +19,47 @@ import type { FatNotesPluginSDK } from "fat-notes-sdk";
 import { TOOLS } from "./registry";
 import { normalizeToolSwitcherConf } from "./ToolSwitcherBlock";
 
+/** 按分类分组，打开下拉时能直接看到「绘图 / 画板」这类靠后的工具 */
+function buildToolOptions(tools: typeof TOOLS) {
+  const groups: { label: string; options: { value: string; label: string }[] }[] =
+    [];
+  const index = new Map<string, number>();
+  for (const tool of tools) {
+    let at = index.get(tool.category);
+    if (at === undefined) {
+      at = groups.length;
+      index.set(tool.category, at);
+      groups.push({ label: tool.category, options: [] });
+    }
+    groups[at].options.push({ value: tool.id, label: tool.title });
+  }
+  return groups;
+}
+
+/**
+ * antd 多选在未指定 optionFilterProp 时按 option.value（工具 id）过滤。
+ * 输入「画板」对不上 id「draw」，所以这里同时匹配标题和 id。
+ */
+function filterToolOption(
+  input: string,
+  option?: { label?: unknown; value?: unknown },
+) {
+  const q = input.trim().toLowerCase();
+  if (!q) return true;
+  const label = typeof option?.label === "string" ? option.label.toLowerCase() : "";
+  const value = option?.value == null ? "" : String(option.value).toLowerCase();
+  return label.includes(q) || value.includes(q);
+}
+
+const toolSelectPopup = {
+  showSearch: true,
+  filterOption: filterToolOption,
+  listHeight: 360,
+  virtual: false,
+  popupMatchSelectWidth: false,
+  getPopupContainer: () => document.body,
+};
+
 // 宿主编辑中的卡片（仅使用已知的 blockEdit 片段）
 interface HostBlockEditState {
   blockEdit?: {
@@ -63,6 +104,10 @@ const ToolSwitcherDisplayConfig: React.FC<Props> = ({ sdk }) => {
       ? conf.tools
       : TOOLS.map((t) => t.id);
   const showSwitch = conf.showSwitch !== false;
+  const allToolOptions = buildToolOptions(TOOLS);
+  const selectedToolOptions = buildToolOptions(
+    TOOLS.filter((t) => selectedIds.includes(t.id)),
+  );
 
   // 宿主公共配置组件（外框等）；独立调试等场景可能缺失，缺失时降级为纯私有配置
   const common = (
@@ -131,7 +176,8 @@ const ToolSwitcherDisplayConfig: React.FC<Props> = ({ sdk }) => {
           placeholder="不选时默认全部工具"
           value={Array.isArray(conf.tools) ? conf.tools : []}
           onChange={(v) => update("tools", v)}
-          options={TOOLS.map((t) => ({ value: t.id, label: t.title }))}
+          options={allToolOptions}
+          {...toolSelectPopup}
         />,
       )}
       {row(
@@ -141,10 +187,8 @@ const ToolSwitcherDisplayConfig: React.FC<Props> = ({ sdk }) => {
           style={{ minWidth: 160, maxWidth: 280 }}
           value={conf.defaultTool || selectedIds[0]}
           onChange={(v) => update("defaultTool", v)}
-          options={TOOLS.filter((t) => selectedIds.includes(t.id)).map((t) => ({
-            value: t.id,
-            label: t.title,
-          }))}
+          options={selectedToolOptions}
+          {...toolSelectPopup}
         />,
       )}
     </div>
