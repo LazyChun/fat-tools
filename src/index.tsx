@@ -43,6 +43,13 @@ import { MORSE_SEARCH_FEED } from "./tools/MorseTool";
 import { JSON_SEARCH_FEED } from "./tools/JsonTool";
 import { REGEX_SEARCH_FEED } from "./tools/RegexTool";
 import { ID_CARD_SEARCH_FEED } from "./tools/IdCardTool";
+import {
+  CURL_SEARCH_FEED,
+  IPV6_SEARCH_FEED,
+  MAC_SEARCH_FEED,
+  PUNYCODE_SEARCH_FEED,
+  ULID_SEARCH_FEED,
+} from "./tools/extras/feeds";
 import type { ToolSearchFeed } from "./tools/searchFeed";
 import { TOOLS } from "./tools/registry";
 import { ROUTE_PREFIX, getDefaultRoute, toolIdToPath } from "./routes";
@@ -74,6 +81,11 @@ const TOOL_SEARCH_FEEDS: Record<string, ToolSearchFeed> = {
   json: JSON_SEARCH_FEED,
   regex: REGEX_SEARCH_FEED,
   "id-card": ID_CARD_SEARCH_FEED,
+  punycode: PUNYCODE_SEARCH_FEED,
+  ulid: ULID_SEARCH_FEED,
+  mac: MAC_SEARCH_FEED,
+  curl: CURL_SEARCH_FEED,
+  ipv6: IPV6_SEARCH_FEED,
 };
 
 /** 活动栏项 id —— 必须与工作台页 id 完全一致，宿主据此绑定右侧工作区 */
