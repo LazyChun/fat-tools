@@ -19,7 +19,7 @@
  * 其它贡献点：
  *   - 路由页注册（供宿主面包屑 / 全局导航识别）
  *   - 全局搜索注册（每个工具注册为可搜索项，宿主全局搜索可直达）
- *   - 页脚状态、设置页
+ *   - 设置页
  *   - 命令：fat-tools.ping / fat-tools.openTool
  *   - 仪表盘块类型：fat-tools.calcCard（迷你计算器卡片）
  *                  fat-tools.toolSwitcher（工具卡片，「其他」分类，
@@ -140,24 +140,7 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
     );
   }
 
-  // 5. 页脚状态项（显示当前工具）
-  safeRegister("footerItem", () =>
-    sdk.contributions.registerFooterItem({
-      id: "fat-tools.footer",
-      align: "right",
-      render: () => {
-        const preferred = getPreferredToolId();
-        const tool = TOOLS.find((t) => t.id === preferred);
-        return React.createElement(
-          "span",
-          { style: { opacity: 0.75 }, title: "fat-tools 工具箱" },
-          `[fat-tools] ${tool ? tool.title : "ready"}`,
-        );
-      },
-    }),
-  );
-
-  // 5.5 全局搜索注册：每个工具注册为一个搜索项（匹配文本 / 图标 / 点击直达）。
+  // 5. 全局搜索注册：每个工具注册为一个搜索项（匹配文本 / 图标 / 点击直达）。
   //     部分工具额外注册输入内容模式（inputPattern，见 TOOL_SEARCH_FEEDS）：
   //     全局搜索输入算式 / 时间戳 / 颜色值 / URL / 编码串等即可命中对应工具，
   //     点击后自动填入输入框。
