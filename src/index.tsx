@@ -273,6 +273,8 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
       category: "tools",
       index: 1,
       defaultSize: { w: 4, h: 10, minW: 3, minH: 8 },
+      // 工具类卡片不依赖宿主查询配置，隐藏下方数据区
+      dataConfig: false,
       render: () => React.createElement(CalculatorTool, { compact: true }),
     }),
   );
@@ -286,6 +288,8 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
       category: "other",
       index: 2,
       defaultSize: { w: 6, h: 24, minW: 4, minH: 8 },
+      // 工具类卡片不依赖宿主查询配置，隐藏下方数据区
+      dataConfig: false,
       // 新建卡片写入 options 的默认值（宿主会深拷贝）
       defaultOptions: {
         toolSwitcher: {
