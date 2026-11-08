@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "c33dec26-05bd-4018-9cac-ba0769b251b2",
+  "type": "bespokePlugin",
+  "name": "工具箱",
+  "description": "100+ 个本地小工具，覆盖文本 / 编码 / 开发 / 数值 / 文件等 11 类；三段式工作台，支持搜索直达、复制导出与可恢复的操作记录",
+  "features": [
+    {
+      "id": "main",
+      "name": "工具箱",
+      "description": "100+ 个本地小工具，覆盖文本 / 编码 / 开发 / 数值 / 文件等 11 类；三段式工作台，支持搜索直达、复制导出与可恢复的操作记录",
+      "match": "工具箱"
+    }
+  ],
+  "version": "0.1.1",
+  "packageFile": "fat-tools_v0.1.1.zip",
+  "code": "fat-tools"
+}

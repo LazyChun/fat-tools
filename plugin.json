@@ -1,7 +1,7 @@
 {
   "id": "c33dec26-05bd-4018-9cac-ba0769b251b2",
   "name": "fat-tools",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A FatNotes bespoke plugin.",
   "entry": "remoteEntry.js",
   "mfName": "plugin_c33dec26_05bd_4018_9cac_ba0769b251b2",
