@@ -1,5 +1,6 @@
 /*
- * 新增 40 个工具的清单。id 不能和 registry 里已有工具重复。
+ * 第一批新增 40 个工具的清单。id 不能和 registry 里已有工具重复。
+ * 第二批 13 个见 moreManifest.ts，由 registry 单独映射注册。
  */
 export const EXTRA_TOOLS = [
   { id: "pinyin", title: "拼音转换", desc: "整段汉字转拼音：带声调、无声调、数字调或首字母", category: "文本" },

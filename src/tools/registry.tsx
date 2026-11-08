@@ -101,6 +101,16 @@ import {
   EnvironmentOutlined,
   CreditCardOutlined,
   AccountBookOutlined,
+  ConsoleSqlOutlined,
+  ProfileOutlined,
+  ReconciliationOutlined,
+  SlidersOutlined,
+  PieChartOutlined,
+  FileImageOutlined,
+  DatabaseOutlined,
+  TeamOutlined,
+  HeartOutlined,
+  FundOutlined,
 } from "@ant-design/icons";
 
 import TextDiffTool from "./TextDiffTool";
@@ -162,6 +172,7 @@ import ChmodTool from "./ChmodTool";
 import HtmlEntityTool from "./HtmlEntityTool";
 import LoanTool from "./LoanTool";
 import { EXTRA_TOOLS, type ExtraToolId } from "./extras/manifest";
+import { MORE_TOOLS, type MoreToolId } from "./extras/moreManifest";
 import {
   ColumnsTool,
   MaskTool,
@@ -210,6 +221,21 @@ import {
   SalaryTool,
   WorkdayTool,
 } from "./extras/LifeExtraTools";
+import {
+  BitwiseTool,
+  CombinationTool,
+  DueDateTool,
+  FakeDataTool,
+  FractionTool,
+  HttpMessageTool,
+  ImageCompressTool,
+  JwtSignTool,
+  LoremTool,
+  PaletteTool,
+  RandomGroupTool,
+  SqlFormatTool,
+  TimezoneTool,
+} from "./extras/MoreExtraTools";
 
 export type ToolCategory =
   | "文本"
@@ -276,6 +302,23 @@ const EXTRA_ICON: Record<ExtraToolId, ToolDef["icon"]> = {
   luhn: CreditCardOutlined,
 };
 
+/** 第二批 13 个工具的图标（独立映射，保持第一批 40 个清单的语义不变） */
+const MORE_ICON: Record<MoreToolId, ToolDef["icon"]> = {
+  "sql-format": ConsoleSqlOutlined,
+  "jwt-sign": ProfileOutlined,
+  "http-message": ReconciliationOutlined,
+  bitwise: SlidersOutlined,
+  palette: PieChartOutlined,
+  "image-compress": FileImageOutlined,
+  "fake-data": DatabaseOutlined,
+  lorem: FileTextOutlined,
+  "random-group": TeamOutlined,
+  timezone: GlobalOutlined,
+  "due-date": HeartOutlined,
+  fraction: FundOutlined,
+  combination: FunctionOutlined,
+};
+
 const EXTRA_VIEW: Record<ExtraToolId, ToolDef["component"]> = {
   pinyin: PinyinTool,
   width: WidthTool,
@@ -317,6 +360,23 @@ const EXTRA_VIEW: Record<ExtraToolId, ToolDef["component"]> = {
   salary: SalaryTool,
   coord: CoordTool,
   luhn: LuhnTool,
+};
+
+/** 第二批 13 个工具的页面 */
+const MORE_VIEW: Record<MoreToolId, ToolDef["component"]> = {
+  "sql-format": SqlFormatTool,
+  "jwt-sign": JwtSignTool,
+  "http-message": HttpMessageTool,
+  bitwise: BitwiseTool,
+  palette: PaletteTool,
+  "image-compress": ImageCompressTool,
+  "fake-data": FakeDataTool,
+  lorem: LoremTool,
+  "random-group": RandomGroupTool,
+  timezone: TimezoneTool,
+  "due-date": DueDateTool,
+  fraction: FractionTool,
+  combination: CombinationTool,
 };
 
 export const TOOLS: ToolDef[] = [
@@ -800,6 +860,16 @@ export const TOOLS: ToolDef[] = [
       category: tool.category,
       icon: EXTRA_ICON[tool.id],
       component: EXTRA_VIEW[tool.id],
+    }),
+  ),
+  ...MORE_TOOLS.map(
+    (tool): ToolDef => ({
+      id: tool.id,
+      title: tool.title,
+      desc: tool.desc,
+      category: tool.category,
+      icon: MORE_ICON[tool.id],
+      component: MORE_VIEW[tool.id],
     }),
   ),
   {

@@ -169,7 +169,7 @@ const TextDiffTool: React.FC<Props> = ({ onBack }) => {
                 const hasParts = Boolean(row.left?.parts || row.right?.parts);
                 const bg = row.type === "change" && hasParts ? "transparent" : lineBg(row.type);
                 const renderSide = (
-                  side: { no: number; text: string } | undefined,
+                  side: { no: number; text: string; parts?: InlinePart[] } | undefined,
                   sideType: "left" | "right",
                 ) => (
                   <div style={{ display: "flex", background: bg, borderBottom: "1px solid rgba(128,128,128,0.12)" }}>

@@ -56,26 +56,38 @@ If names don't match you will see:
 - `types/fat-notes-sdk.d.ts` — SDK type declarations (mirror of host).
 - `webpack.config.js` — Module Federation build (`exposes ./plugin`).
 
-## 内置工具（100 个，纯前端实现）
+## 内置工具（113 个，纯前端实现）
 
 菜单按分类展示，点击卡片 → `sdk.router.navigate("/tools/<toolId>")`。
 
 | 分类 | 工具 |
 | --- | --- |
 | 文本 | 文本对比、字数统计、正则测试、命名转换、行处理、Markdown 预览、汉字拆解、拼音转换、全半角转换、查找替换、词频统计、模板填充、Markdown 表格、大小写转换、列提取、信息脱敏 |
-| 编码 | Base64、URL 编解码、颜色转换、摩斯电码、HTML 实体、古典密码、Punycode、Unicode 码点、字符串转义、Base32、十六进制转储、对比度 |
-| 开发 | JSON 工具、哈希计算、UUID 生成器、时间戳转换、URL 解析、JWT 解析、DNS 查询、Cron 表达式、XML 工具、数据格式转换、IP / CIDR 计算、Unix 权限、JSON 转类型、JSON 扁平化、ULID、IPv6 转换、MAC 地址、UA 解析、HTTP 状态码、MIME 类型、语义化版本、路径处理、.env 解析、cURL 解析 |
-| 数值 | 计算器、进制转换、单位换算、元素周期表、汇率计算、金额大写、科学计算器、贷款计算器、百分比、比例计算、复利计算、罗马数字、几何计算 |
+| 编码 | Base64、URL 编解码、颜色转换、摩斯电码、HTML 实体、古典密码、Punycode、Unicode 码点、字符串转义、Base32、十六进制转储、对比度、配色方案 |
+| 开发 | JSON 工具、哈希计算、UUID 生成器、时间戳转换、URL 解析、JWT 解析、DNS 查询、Cron 表达式、XML 工具、数据格式转换、IP / CIDR 计算、Unix 权限、JSON 转类型、JSON 扁平化、ULID、IPv6 转换、MAC 地址、UA 解析、HTTP 状态码、MIME 类型、语义化版本、路径处理、.env 解析、cURL 解析、SQL 格式化、JWT 生成、HTTP 报文解析、位运算 |
+| 数值 | 计算器、进制转换、单位换算、元素周期表、汇率计算、金额大写、科学计算器、贷款计算器、百分比、比例计算、复利计算、罗马数字、几何计算、分数计算、排列组合 |
 | 绘图 | 画板、表情包制作 |
-| 生成 | 密码生成器、条形码生成、二维码工具、随机字符生成、转盘抽签、智能取名、骰子、随机数 |
-| 时间 | 秒表 / 倒计时、时间计算器、假期日历、农历转换、工作日计算 |
-| 生活 | 亲友关系图谱、血型图谱、星座罗盘、易经算命、网站导航、身份证校验、体质指数、税后工资、坐标转换、Luhn 校验 |
-| 文件 | PDF 合并、PDF 分割、发票工具、格子拆图、格子合图、屏幕截图、格式转换 |
+| 生成 | 密码生成器、条形码生成、二维码工具、随机字符生成、转盘抽签、智能取名、骰子、随机数、测试数据生成、占位文本、随机分组 |
+| 时间 | 秒表 / 倒计时、时间计算器、假期日历、农历转换、工作日计算、世界时区换算 |
+| 生活 | 亲友关系图谱、血型图谱、星座罗盘、易经算命、网站导航、身份证校验、体质指数、税后工资、坐标转换、Luhn 校验、预产期计算 |
+| 文件 | PDF 合并、PDF 分割、发票工具、格子拆图、格子合图、屏幕截图、格式转换、图片压缩 |
 | 历史 | 中华朝代年鉴 |
 | 记录 | 待办清单、操作记录 |
 
-> 新增工具只需在 `src/tools/registry.tsx` 加一条记录（`ToolCategory` 已支持上表分类），
-> 纯计算逻辑收敛到 `src/utils.ts`（不依赖 DOM，便于 `vitest` 单测）。
+> 常规工具只需在 `src/tools/registry.tsx` 加一条记录（`ToolCategory` 已支持上表分类）；
+> 轻量批次走 `src/tools/extras/manifest.ts`（第一批 40 个）或 `moreManifest.ts`（第二批 13 个），
+> 再补齐 registry 中的图标 / 组件映射。纯计算逻辑收敛到 `src/utils.ts` 或 `extras/*Logic.ts`
+> （不依赖 DOM，便于 `vitest` 单测）。
+
+### 第二批 13 个工具（2026-11-08）
+
+清单 `src/tools/extras/moreManifest.ts`、纯函数 `moreLogic.ts`、界面 `MoreExtraTools.tsx`、
+单测 `tests/moreTools.test.ts`；registry 用 `MORE_ICON` / `MORE_VIEW` 单独映射，
+这样第一批 40 个清单与 `tests/extra40.test.ts` 的断言保持不变。
+
+其中 JWT 生成（WebCrypto HMAC 签发）与原有 JWT 解析互补；HTTP 报文解析处理原始报文
+（cURL 解析处理命令）；配色方案由单色推导整套色板（颜色转换 / 对比度面向单 / 双色）；
+图片压缩走本地 canvas 等比缩放（格式转换只换封装格式）。签名密钥不写入操作记录。
 
 ### 发票工具（电子发票处理）
 

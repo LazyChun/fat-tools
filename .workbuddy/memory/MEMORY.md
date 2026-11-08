@@ -41,3 +41,15 @@ FatNotes 定制插件「fat-tools」——开发者常用工具箱。Monorepo �
 - 数据在 `src/tools/dynastyData.ts`（28 政权 + ERAS + FIGURE_ROLE_LABEL），疆域示意在 `territoryData.ts`（CHINA_OUTLINE + DYNASTY_TERRITORIES，必须覆盖全部朝代 id），纯函数在 `src/utils.ts`（yearLabel/spanLabel/durationYears/timelineX/assignLanes/areaRatio/areaRank/formatAreaKm2/polygonPath/dynastyHighlights）。
 - 关键不变式（`tests/dynasty.test.ts` 已锁定）：车道断言 xia/dongjin=0、shiliuguo/wuzhou/liao=1、xixia=2、jin=3、max=3；之最 = 商 554 年 / 元 1400 万 km² / 统一占比 0.3~0.4；TIMELINE_MIN_BAND=10。
 - 坑：为让「主序列」占 0 车道，三国终点取 265（魏禅晋）、五代十国终点取 960（后周禅宋），勿改回 280/979 否则车道断言失败；字符串内中文引号必须用「“”」而非 ASCII `"`（曾致全文件 TS1005）。
+
+## 批次工具的注册范式（2026-11-08，第二批 13 个后固化）
+
+- 现有 113 个工具 = registry 直接登记 60 个 + `extras/manifest.ts` 第一批 40 个 + `extras/moreManifest.ts` 第二批 13 个。
+- **新增轻量批次时不要把清单合进既有 manifest**：`tests/extra40.test.ts` 断言 `EXTRA_TOOLS.length === 40`，
+  应新建独立清单 + 在 registry 用 `MORE_ICON` / `MORE_VIEW`（`Record<MoreToolId,...>`）单独映射，
+  在 `...EXTRA_TOOLS.map()` 之后追加 `...MORE_TOOLS.map()`；编译期的 Record 会强制补齐图标与组件。
+- 批次纯函数放 `extras/*Logic.ts`、UI 放 `extras/*ExtraTools.tsx` 并共用 `extras/kit.tsx` 的 `ExtraPage`
+  （自带操作记录 + 历史恢复）；单测独立一个 `tests/*.test.ts`，含 id/标题唯一性断言。
+- 敏感输入（如 JWT 签名密钥）**不要写进 detail**，否则会落进 history 数据库。
+- 时区换算用 `Intl.DateTimeFormat.formatToParts` 求偏移 + 迭代反解墙上时间；`hour12:false` 在 en-US 下午夜可能返回 24，取 `% 24`。
+- 每次交付记得同步 README 工具数量/表格、重新打包 `install.zip`，并跑 typecheck + test + `CODEBUDDY_SAFE_DELETE_ENABLED=0 npm run build`。
