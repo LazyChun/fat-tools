@@ -275,6 +275,26 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
       defaultSize: { w: 4, h: 10, minW: 3, minH: 8 },
       // 工具类卡片不依赖宿主查询配置，隐藏下方数据区
       dataConfig: false,
+      configDoc: {
+        type: "fat-tools.calcCard",
+        title: "计算器",
+        summary: "迷你计算器卡片。没有可配的数据查询，属性留空对象即可。",
+        category: "tools",
+        keywords: ["计算器", "计算"],
+        layout: { w: 4, h: 10, description: "网格单位。画布 24 列，行高 8px。" },
+        sections: [
+          {
+            key: "options",
+            description: "计算器没有私有字段，属性传空对象。",
+            example: {},
+          },
+          {
+            key: "reqParams",
+            description: "不查询数据源。",
+            example: { queries: [] },
+          },
+        ],
+      },
       render: () => React.createElement(CalculatorTool, { compact: true }),
     }),
   );
@@ -291,6 +311,73 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
       // 工具类卡片不依赖宿主查询配置，隐藏下方数据区
       dataConfig: false,
       // 新建卡片写入 options 的默认值（宿主会深拷贝）
+      configDoc: {
+        type: "fat-tools.toolSwitcher",
+        title: "工具",
+        summary: "在一张卡片里切换常用工具。不使用数据查询。",
+        category: "other",
+        keywords: ["工具", "计算器", "json", "时间戳"],
+        layout: { w: 6, h: 24, description: "网格单位。画布 24 列，行高 8px。" },
+        notes: ["请求参数传 queries 空数组。"],
+        sections: [
+          {
+            key: "options",
+            description: "写在 options.toolSwitcher。tools 是工具 id 列表。",
+            fields: [
+              {
+                path: "toolSwitcher.tools",
+                name: "工具列表",
+                dataType: "array",
+                description: "可切换的工具 id，例如 calculator、json、timestamp、uuid",
+              },
+              {
+                path: "toolSwitcher.defaultTool",
+                name: "默认工具",
+                dataType: "string",
+                description: "打开卡片时进入的工具 id",
+                default: "calculator",
+              },
+              {
+                path: "toolSwitcher.showSwitch",
+                name: "显示切换",
+                dataType: "boolean",
+                description: "是否显示切换控件",
+                default: true,
+              },
+              {
+                path: "toolSwitcher.switchStyle",
+                name: "切换样式",
+                dataType: "string",
+                description: "segmented 或 select",
+                enum: ["segmented", "select"],
+                default: "segmented",
+              },
+              {
+                path: "toolSwitcher.switchPosition",
+                name: "切换位置",
+                dataType: "string",
+                description: "top 或 bottom",
+                enum: ["top", "bottom"],
+                default: "top",
+              },
+            ],
+            example: {
+              toolSwitcher: {
+                tools: ["calculator", "json", "timestamp", "uuid"],
+                defaultTool: "calculator",
+                showSwitch: true,
+                switchStyle: "segmented",
+                switchPosition: "top",
+              },
+            },
+          },
+          {
+            key: "reqParams",
+            description: "不查询数据源。",
+            example: { queries: [] },
+          },
+        ],
+      },
       defaultOptions: {
         toolSwitcher: {
           tools: ["calculator", "json", "timestamp", "uuid"],

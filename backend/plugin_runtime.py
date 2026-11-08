@@ -63,6 +63,18 @@ def _host_plugin_id() -> str:
     return (os.getenv("FAT_NOTES_PLUGIN_ID") or "").strip()
 
 
+def _host_api_token() -> str:
+    return (os.getenv("FAT_NOTES_API_TOKEN") or "").strip()
+
+
+def _host_request_headers() -> Dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    token = _host_api_token()
+    if token:
+        headers["X-Fat-Api-Token"] = token
+    return headers
+
+
 def _host_call(
     method: str, params: Optional[Dict[str, Any]] = None, timeout: float = 10
 ) -> Any:
@@ -80,7 +92,7 @@ def _host_call(
     req = _urlrequest.Request(
         url,
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers=_host_request_headers(),
         method="POST",
     )
     # 显式禁用代理：fat-notes 宿主侧是本机 HTTP 服务（如 127.0.0.1:8022），
@@ -94,6 +106,8 @@ def _host_call(
             body = resp.read().decode("utf-8")
     except _urlerror.HTTPError as e:
         err = e.read().decode("utf-8", errors="ignore")
+        if e.code == 401 and not _host_api_token():
+            err = f"{err} FAT_NOTES_API_TOKEN is not set".strip()
         raise RuntimeError(f"Host API HTTPError {e.code}: {err}") from e
     except Exception as e:
         raise RuntimeError(f"Host API request failed: {e}") from e
