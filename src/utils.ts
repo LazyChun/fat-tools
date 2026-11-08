@@ -376,10 +376,16 @@ export interface DiffLine {
   text: string;
 }
 
+/** 改动行内部的片段：changed 为 false 表示左右都有的相同字段 */
+export interface InlinePart {
+  text: string;
+  changed: boolean;
+}
+
 export interface DiffRow {
   type: "same" | "change" | "del" | "add";
-  left?: { no: number; text: string };
-  right?: { no: number; text: string };
+  left?: { no: number; text: string; parts?: InlinePart[] };
+  right?: { no: number; text: string; parts?: InlinePart[] };
 }
 
 const DIFF_MAX_LINES = 2000;
@@ -441,6 +447,245 @@ export function lineDiff(aText: string, bText: string): DiffLine[] {
   return ops;
 }
 
+const INLINE_MAX_CHARS = 800;
+const PAIR_MAX_CELLS = 2500;
+/** 较短行的二字组有这么大比例能在另一行找到，就视为同一字段的改动而不是整行无关 */
+const LINE_OVERLAP = 0.72;
+
+function codePoints(text: string): string[] {
+  return Array.from(text);
+}
+
+function bigramOverlap(a: string[], b: string[]): number {
+  const bag = (chars: string[]) => {
+    const m = new Map<string, number>();
+    if (chars.length === 1) {
+      m.set(chars[0], 1);
+      return m;
+    }
+    for (let i = 0; i < chars.length - 1; i++) {
+      const key = chars[i] + chars[i + 1];
+      m.set(key, (m.get(key) ?? 0) + 1);
+    }
+    return m;
+  };
+  const ma = bag(a);
+  const mb = bag(b);
+  let inter = 0;
+  let sa = 0;
+  let sb = 0;
+  for (const v of ma.values()) sa += v;
+  for (const v of mb.values()) sb += v;
+  if (sa === 0 || sb === 0) return 0;
+  for (const [key, v] of ma) inter += Math.min(v, mb.get(key) ?? 0);
+  return inter / Math.min(sa, sb);
+}
+
+/** 两行不是逐字相等，但共享同一段字段（短行被长行包含，或二字组大部分重合） */
+function isSimilarLine(a: string, b: string): boolean {
+  if (a === b) return true;
+  const ac = codePoints(a);
+  const bc = codePoints(b);
+  const shorter = Math.min(ac.length, bc.length);
+  if (shorter < 2) return false;
+  if (shorter >= 3 && (a.includes(b) || b.includes(a))) return true;
+  return bigramOverlap(ac, bc) >= LINE_OVERLAP;
+}
+
+/**
+ * 改动行内的字符级 diff。
+ * 左右都有的连续片段标为相同；夹在改动中间的单字不单独算相同，避免无关行被标成一片碎字段。
+ * 完全没有相同片段时返回 null，调用方整行高亮。
+ */
+function inlineParts(a: string, b: string): { left: InlinePart[]; right: InlinePart[] } | null {
+  const ac = codePoints(a);
+  const bc = codePoints(b);
+  const n = ac.length;
+  const m = bc.length;
+  if (n === 0 || m === 0 || n > INLINE_MAX_CHARS || m > INLINE_MAX_CHARS) return null;
+
+  const width = m + 1;
+  const dp = new Uint16Array((n + 1) * width);
+  for (let i = n - 1; i >= 0; i--) {
+    const row = i * width;
+    const next = (i + 1) * width;
+    for (let j = m - 1; j >= 0; j--) {
+      dp[row + j] =
+        ac[i] === bc[j]
+          ? dp[next + j + 1] + 1
+          : Math.max(dp[next + j], dp[row + j + 1]);
+    }
+  }
+
+  type Op = { t: "eq" | "del" | "add"; ch: string };
+  const ops: Op[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (ac[i] === bc[j]) {
+      ops.push({ t: "eq", ch: ac[i] });
+      i++;
+      j++;
+    } else if (dp[(i + 1) * width + j] >= dp[i * width + j + 1]) {
+      ops.push({ t: "del", ch: ac[i] });
+      i++;
+    } else {
+      ops.push({ t: "add", ch: bc[j] });
+      j++;
+    }
+  }
+  while (i < n) ops.push({ t: "del", ch: ac[i++] });
+  while (j < m) ops.push({ t: "add", ch: bc[j++] });
+
+  const cleaned: Op[] = [];
+  let k = 0;
+  while (k < ops.length) {
+    if (ops[k].t !== "eq") {
+      cleaned.push(ops[k]);
+      k++;
+      continue;
+    }
+    let end = k;
+    while (end < ops.length && ops[end].t === "eq") end++;
+    const prevChange = k > 0 && ops[k - 1].t !== "eq";
+    const nextChange = end < ops.length && ops[end].t !== "eq";
+    if (end - k === 1 && prevChange && nextChange) {
+      cleaned.push({ t: "del", ch: ops[k].ch });
+      cleaned.push({ t: "add", ch: ops[k].ch });
+    } else {
+      for (let t = k; t < end; t++) cleaned.push(ops[t]);
+    }
+    k = end;
+  }
+  if (!cleaned.some((op) => op.t === "eq")) return null;
+
+  const left: InlinePart[] = [];
+  const right: InlinePart[] = [];
+  const push = (arr: InlinePart[], changed: boolean, ch: string) => {
+    const last = arr[arr.length - 1];
+    if (last && last.changed === changed) last.text += ch;
+    else arr.push({ text: ch, changed });
+  };
+  for (const op of cleaned) {
+    if (op.t === "eq") {
+      push(left, false, op.ch);
+      push(right, false, op.ch);
+    } else if (op.t === "del") {
+      push(left, true, op.ch);
+    } else {
+      push(right, true, op.ch);
+    }
+  }
+  return { left, right };
+}
+
+function changeRow(d: DiffLine, a: DiffLine): DiffRow {
+  const parts = inlineParts(d.text, a.text);
+  return {
+    type: "change",
+    left: { no: d.aNo!, text: d.text, parts: parts?.left },
+    right: { no: a.bNo!, text: a.text, parts: parts?.right },
+  };
+}
+
+function singleRow(d: DiffLine | undefined, a: DiffLine | undefined): DiffRow {
+  if (d && a) return changeRow(d, a);
+  if (d) return { type: "del", left: { no: d.aNo!, text: d.text } };
+  return { type: "add", right: { no: a!.bNo!, text: a!.text } };
+}
+
+/**
+ * 一整段「先删后增」不要按行号硬配。
+ * 先把共享字段的行配成一对（短行被另一行包含也算），剩下的再按顺序左右对照。
+ */
+function pairDelAdd(dels: DiffLine[], adds: DiffLine[]): DiffRow[] {
+  const n = dels.length;
+  const m = adds.length;
+  if (n === 0) return adds.map((a) => singleRow(undefined, a));
+  if (m === 0) return dels.map((d) => singleRow(d, undefined));
+
+  const useSim = n * m <= PAIR_MAX_CELLS;
+  const sim = useSim ? new Uint8Array(n * m) : null;
+  if (sim) {
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < m; j++) {
+        if (isSimilarLine(dels[i].text, adds[j].text)) sim[i * m + j] = 1;
+      }
+    }
+  }
+  const similar = (i: number, j: number) => (sim ? sim[i * m + j] === 1 : false);
+
+  type Slot =
+    | { k: "match"; d: DiffLine; a: DiffLine }
+    | { k: "del"; d: DiffLine }
+    | { k: "add"; a: DiffLine };
+  const slots: Slot[] = [];
+
+  if (!sim || !sim.some((v) => v === 1)) {
+    const max = Math.max(n, m);
+    const rows: DiffRow[] = [];
+    for (let r = 0; r < max; r++) rows.push(singleRow(dels[r], adds[r]));
+    return rows;
+  }
+
+  const width = m + 1;
+  const dp = new Uint16Array((n + 1) * width);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i * width + j] = similar(i, j)
+        ? dp[(i + 1) * width + j + 1] + 1
+        : Math.max(dp[(i + 1) * width + j], dp[i * width + j + 1]);
+    }
+  }
+
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (similar(i, j)) {
+      slots.push({ k: "match", d: dels[i], a: adds[j] });
+      i++;
+      j++;
+    } else if (dp[(i + 1) * width + j] >= dp[i * width + j + 1]) {
+      slots.push({ k: "del", d: dels[i] });
+      i++;
+    } else {
+      slots.push({ k: "add", a: adds[j] });
+      j++;
+    }
+  }
+  while (i < n) slots.push({ k: "del", d: dels[i++] });
+  while (j < m) slots.push({ k: "add", a: adds[j++] });
+
+  const rows: DiffRow[] = [];
+  let k = 0;
+  while (k < slots.length) {
+    const slot = slots[k];
+    if (slot.k === "match") {
+      rows.push(changeRow(slot.d, slot.a));
+      k++;
+      continue;
+    }
+    if (slot.k === "del") {
+      const ds: DiffLine[] = [];
+      while (k < slots.length && slots[k].k === "del") {
+        ds.push((slots[k] as { k: "del"; d: DiffLine }).d);
+        k++;
+      }
+      const as: DiffLine[] = [];
+      while (k < slots.length && slots[k].k === "add") {
+        as.push((slots[k] as { k: "add"; a: DiffLine }).a);
+        k++;
+      }
+      const max = Math.max(ds.length, as.length);
+      for (let r = 0; r < max; r++) rows.push(singleRow(ds[r], as[r]));
+      continue;
+    }
+    rows.push(singleRow(undefined, slot.a));
+    k++;
+  }
+  return rows;
+}
+
 /** 将统一 diff 序列转换为左右对照行 */
 export function diffToRows(ops: DiffLine[]): DiffRow[] {
   const rows: DiffRow[] = [];
@@ -461,22 +706,7 @@ export function diffToRows(ops: DiffLine[]): DiffRow[] {
       while (k < ops.length && ops[k].type === "del") dels.push(ops[k++]);
       const adds: DiffLine[] = [];
       while (k < ops.length && ops[k].type === "add") adds.push(ops[k++]);
-      const max = Math.max(dels.length, adds.length);
-      for (let r = 0; r < max; r++) {
-        const d = dels[r];
-        const a = adds[r];
-        if (d && a) {
-          rows.push({
-            type: "change",
-            left: { no: d.aNo!, text: d.text },
-            right: { no: a.bNo!, text: a.text },
-          });
-        } else if (d) {
-          rows.push({ type: "del", left: { no: d.aNo!, text: d.text } });
-        } else if (a) {
-          rows.push({ type: "add", right: { no: a.bNo!, text: a.text } });
-        }
-      }
+      rows.push(...pairDelAdd(dels, adds));
       continue;
     }
     // 独立的 add（前面没有 del）

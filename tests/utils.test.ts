@@ -81,6 +81,24 @@ describe("lineDiff", () => {
     const ops = lineDiff("a\r\nb", "a\nb");
     expect(ops.every((o) => o.type === "same")).toBe(true);
   });
+  it("改动行标出相同字段，只高亮真正不同的字符", () => {
+    const rows = diffToRows(lineDiff("id=15%", "id=15%1"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe("change");
+    expect(rows[0].left?.parts?.map((p) => `${p.changed ? "~" : "="}${p.text}`)).toEqual(["=id=15%"]);
+    expect(rows[0].right?.parts?.map((p) => `${p.changed ? "~" : "="}${p.text}`)).toEqual([
+      "=id=15%",
+      "~1",
+    ]);
+  });
+  it("相同字段不在同一行号时也对齐，而不是按顺序硬配", () => {
+    const rows = diffToRows(lineDiff("15%", "其他\n进度 15%\n结尾"));
+    const change = rows.find((r) => r.left?.text === "15%");
+    expect(change?.type).toBe("change");
+    expect(change?.right?.text).toBe("进度 15%");
+    expect(change?.right?.parts?.filter((p) => !p.changed).map((p) => p.text).join("")).toBe("15%");
+    expect(rows.filter((r) => r.type === "add").map((r) => r.right?.text)).toEqual(["其他", "结尾"]);
+  });
 });
 
 describe("countTextStats", () => {

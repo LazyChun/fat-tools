@@ -1,10 +1,10 @@
 /*
- * 文本对比工具：LCS 行级 diff，左右对照显示
+ * 文本对比工具：LCS 行级 diff，改动行内再标出相同字段
  */
 import React, { useMemo, useState } from "react";
 import { Button, Empty, Input, Space, Tag, Tooltip } from "antd";
 import { ClearOutlined, SwapOutlined } from "@ant-design/icons";
-import { diffToRows, lineDiff } from "../utils";
+import { diffToRows, lineDiff, type InlinePart } from "../utils";
 import { ToolShell } from "../components/Common";
 import ToolHistoryPanel from "../components/ToolHistory";
 import { recordUsage } from "../historyClient";
@@ -22,6 +22,20 @@ const lineBg = (type: string): string => {
   if (type === "del") return "rgba(255, 77, 79, 0.18)";
   if (type === "change") return "rgba(250, 173, 20, 0.16)";
   return "transparent";
+};
+
+const renderPieces = (text: string, parts: InlinePart[] | undefined, side: "left" | "right") => {
+  if (!parts || !parts.some((p) => !p.changed)) return text;
+  const mark = side === "left" ? "rgba(255, 77, 79, 0.45)" : "rgba(82, 196, 26, 0.5)";
+  return parts.map((p, idx) =>
+    p.changed ? (
+      <span key={idx} style={{ background: mark, borderRadius: 2 }}>
+        {p.text}
+      </span>
+    ) : (
+      <span key={idx}>{p.text}</span>
+    ),
+  );
 };
 
 const TextDiffTool: React.FC<Props> = ({ onBack }) => {
@@ -152,7 +166,8 @@ const TextDiffTool: React.FC<Props> = ({ onBack }) => {
           >
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", minWidth: 480 }}>
               {result.map((row, i) => {
-                const bg = lineBg(row.type);
+                const hasParts = Boolean(row.left?.parts || row.right?.parts);
+                const bg = row.type === "change" && hasParts ? "transparent" : lineBg(row.type);
                 const renderSide = (
                   side: { no: number; text: string } | undefined,
                   sideType: "left" | "right",
@@ -171,7 +186,7 @@ const TextDiffTool: React.FC<Props> = ({ onBack }) => {
                       {side ? side.no : ""}
                     </span>
                     <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                      {side ? side.text : "\u00A0"}
+                      {side ? renderPieces(side.text, side.parts, sideType) : "\u00A0"}
                     </span>
                     {row.type === "change" ? (
                       <span
