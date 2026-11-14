@@ -63,8 +63,8 @@ import ToolSwitcherDisplayConfig from "./tools/ToolSwitcherDisplayConfig";
 const disposables: Disposable[] = [];
 
 /**
- * 「全局搜索输入直达」喂入器表：命中工具的输入内容模式时（inputPattern），
- * 全局搜索结果出现该工具，点击直达并把触发文本自动填入输入框。
+ * 「全局搜索输入直达」喂入器表：搜索词匹配工具 inputPattern 时，
+ * 结果中出现该工具；点击后仅在内容可解析时填入输入框（名称搜索只打开不填）。
  */
 const TOOL_SEARCH_FEEDS: Record<string, ToolSearchFeed> = {
   calculator: CALCULATOR_SEARCH_FEED,
@@ -175,7 +175,8 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
             tool.id.split("-").join(" "),
           ]),
         );
-        // 输入直达：命中输入模式时，点击后把触发文本自动填入输入框
+        // 输入直达：仅当搜索词匹配 inputPattern（如 89+33）时填入；
+        // 按名称/描述点进（如「计算器」）只打开工具，不赋值（feed 内也会再校验）
         const searchFeed = TOOL_SEARCH_FEEDS[tool.id];
         return {
           id: tool.id,
@@ -188,9 +189,7 @@ export async function activate(sdk: FatNotesPluginSDK): Promise<void> {
           activityId: ACTIVITY_ID,
           onSelect: (query?: string) => {
             openTool();
-            if (query && searchFeed) {
-              searchFeed.feed(query);
-            }
+            if (query) searchFeed?.feed(query);
           },
         };
       }),
